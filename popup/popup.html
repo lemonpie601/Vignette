@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Vignette</title>
+<link rel="stylesheet" href="../manager/theme.css">
+<style>
+  body { width: 300px; margin: 0; padding: 8px; background: var(--surface); color: var(--text); font: 13.5px/1.45 var(--font); }
+  .head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px; }
+  .mark { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: linear-gradient(135deg, #8d5a33, #5b3a20); color: #fff8ef; flex: none; }
+  .head b { display: block; font-size: 13.5px; font-weight: 800; }
+  .head small { color: var(--soft); font-size: 11px; }
+  .card { padding: 2px 4px; border-radius: 12px; background: var(--elev); }
+  .toggle { display: flex; align-items: center; gap: 12px; padding: 9px 8px 9px 10px; }
+  .toggle + .toggle { border-top: 1px solid var(--line); }
+  .toggle .t { flex: 1; display: grid; font-weight: 650; }
+  .toggle .t small { font-size: 11.5px; font-weight: 500; color: var(--soft); }
+  .sep { height: 1px; margin: 6px 8px; background: var(--line); }
+  .item { display: flex; align-items: center; gap: 11px; width: 100%; padding: 9px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .item svg { flex: 0 0 16px; color: var(--muted); }
+  .item:hover:not(:disabled) { background: var(--elev); }
+  .item:hover:not(:disabled) svg { color: var(--accent); }
+  .item:disabled { opacity: .42; cursor: not-allowed; }
+  .count { margin-left: auto; padding: 0 7px; border-radius: 999px; background: var(--elev); color: var(--muted); font-style: normal; font-size: 11px; font-weight: 700; line-height: 19px; }
+  .site { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 4px 10px 2px; font-size: 11.5px; }
+  .site b { color: var(--muted); }
+  .ok { color: var(--ok); } .warn { color: var(--warn); }
+  .note { padding: 6px 10px; font-size: 12px; color: var(--soft); }
+  .host { font-weight: 700; word-break: break-all; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin: 4px 8px 6px; padding: 3px; border-radius: 10px; background: var(--elev); }
+  .seg button { padding: 6px 4px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font: 600 12px var(--font); cursor: pointer; }
+  .seg button.on { background: var(--surface); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .label { padding: 4px 10px 0; font-size: 11.5px; font-weight: 700; color: var(--soft); }
+  button.wide { width: calc(100% - 16px); margin: 6px 8px; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <span class="mark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></span>
+    <span><b>Vignette</b></span>
+  </div>
+  <div id="root"></div>
+  <script src="../shared/platforms.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

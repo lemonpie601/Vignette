@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vignette 관리</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="manager.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <span class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></span>
+      <span><b>Vignette</b><small>관리</small></span>
+    </div>
+    <nav class="nav">
+      <a href="#chats" data-view="chats">보관함<em id="nav-chats"></em></a>
+      <a href="#gallery" data-view="gallery">전체 갤러리<em id="nav-images"></em></a>
+      <a href="#sites" data-view="sites">사이트 설정</a>
+      <a href="#backup" data-view="backup">백업 · 복원</a>
+      <a href="#prefs" data-view="prefs">환경설정</a>
+    </nav>
+    <div class="side-foot" id="usage"></div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+<div class="lightbox" id="lightbox" hidden></div>
+<div class="toast" id="toast" hidden></div>
+<script src="../lib/fflate.js"></script>
+<script src="../shared/platforms.js"></script>
+<script src="../shared/imagedb.js"></script>
+<script src="../shared/dropdown.js"></script>
+<script src="manager.js"></script>
+</body>
+</html>

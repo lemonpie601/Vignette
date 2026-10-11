@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Vignette",
+  "short_name": "Vignette",
+  "version": "7.0.0",
+  "description": "AI 캐릭터 채팅 답변에 NovelAI 삽화를 그려 넣어요. 여러 플랫폼 지원 · 플랫폼별/채팅별 보관 · 관리 페이지.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Vignette",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "unlimitedStorage", "scripting", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content/loader.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Vignette 패널 열기"
+    }
+  },
+  "options_ui": {
+    "page": "manager/manager.html",
+    "open_in_tab": true
+  }
+}

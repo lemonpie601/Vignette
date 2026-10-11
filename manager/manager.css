@@ -32,6 +32,61 @@ h2 { margin: 0 0 10px; font-size: 15px; }
 .backup-hero p { margin: 4px 0 0; }
 .btn.big { padding: 12px 20px; font-size: 14px; border-radius: 12px; }
 .form-row .dd-button { width: 240px; }
+.nav em.is-warn { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--warn); color: #fff; font-size: 11px; }
+/* ── 공통 설정 · API 키 ────────────────────────────────────── */
+.keys-page { max-width: 880px; padding-bottom: 80px; }
+.ready-banner { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; padding: 14px 18px; border-radius: var(--radius); border: 1px solid transparent; }
+.ready-banner.is-ok { background: color-mix(in srgb, var(--ok) 10%, var(--surface)); border-color: color-mix(in srgb, var(--ok) 25%, transparent); }
+.ready-banner.is-warn { background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 28%, transparent); }
+.ready-icon { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 900; font-size: 16px; }
+.ready-banner.is-ok .ready-icon { background: var(--ok); }
+.ready-banner.is-warn .ready-icon { background: var(--warn); }
+.ready-banner b { display: block; font-size: 15px; }
+.ready-banner small { color: var(--soft); font-size: 12.5px; }
+
+.key-card { margin-bottom: 14px; padding: 18px 20px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.key-card header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.key-card-icon { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.key-card-title { flex: 1; min-width: 0; display: grid; }
+.key-card-title b { font-size: 15.5px; }
+.key-card-title small { color: var(--soft); font-size: 12.5px; }
+.key-pill { flex: none; padding: 4px 11px; border-radius: 99px; font-size: 12px; font-weight: 800; }
+.key-pill.is-ok { background: color-mix(in srgb, var(--ok) 14%, var(--surface)); color: var(--ok); }
+.key-pill.is-missing { background: #e5484d; color: #fff; }
+
+.key-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.key-input::placeholder { font-family: var(--font); letter-spacing: 0; color: var(--soft); }
+.key-field { display: grid; gap: 6px; min-width: 0; }
+.key-field.is-wide, .key-field:has(.secret-field) { grid-column: 1 / -1; }
+.key-field > label { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.key-input, .key-field select, .key-field .dd-button { width: 100%; min-height: 40px; border-radius: 10px; }
+.key-input { padding: 9px 12px; }
+.key-input.mono { font-family: var(--mono); font-size: 12.5px; }
+textarea.key-input { min-height: 110px; line-height: 1.5; }
+.secret-field { position: relative; }
+.secret-field .key-input { padding-right: 44px; letter-spacing: .02em; }
+.secret-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--soft); cursor: pointer; }
+.secret-eye:hover { background: var(--elev); color: var(--text); }
+.key-hint { margin: 12px 0 0; padding-top: 12px; border-top: 1px dashed var(--line-strong); font-size: 12px; color: var(--soft); }
+
+.key-note { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; padding: 14px 18px; border-radius: var(--radius); background: var(--elev); }
+.key-note-icon { flex: none; color: var(--accent); margin-top: 1px; }
+.key-note b { display: block; font-size: 13.5px; }
+.key-note small { color: var(--soft); font-size: 12.5px; line-height: 1.6; }
+
+.save-bar {
+  position: sticky; bottom: 16px; z-index: 5; display: flex; align-items: center; gap: 8px;
+  margin-top: 18px; padding: 10px 10px 10px 18px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow);
+  transition: border-color .15s, background-color .15s;
+}
+.save-bar > span { flex: 1; font-size: 13px; color: var(--soft); }
+.save-bar.is-dirty { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.save-bar.is-dirty > span { color: var(--accent); font-weight: 700; }
+.save-bar .btn { min-width: 84px; }
+@media (max-width: 760px) {
+  .key-grid { grid-template-columns: 1fr; }
+}
 
 .main { min-width: 0; padding: 28px 32px 60px; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }

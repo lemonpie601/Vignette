@@ -24,7 +24,7 @@ async function injectCore(tabId, frameId = 0) {
         });
         return { ok: true };
     } catch (err) {
-        console.warn('[Scene Painter] inject failed', err);
+        console.info('[Vignette] inject failed', err);
         return { ok: false, error: String(err?.message || err) };
     }
 }

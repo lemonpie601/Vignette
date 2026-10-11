@@ -97,8 +97,12 @@ async function render() {
     } else {
         const on = state.enabled;
         const count = state.galleryCount ? `<em class="count">${state.galleryCount > 999 ? '999+' : state.galleryCount}</em>` : '';
-        const mark = (v, alt = '') => `<em class="count">${v ? '✓' : alt}</em>`;
-        root.innerHTML = siteSwitch + `
+        // 지정됨 ✓(초록) · 안 됨 ✕(빨강)
+        const mark = (v) => v ? '<em class="count is-set">✓</em>' : '<em class="count is-unset" title="아직 지정 안 됨">✕</em>';
+        const keyWarn = state.naiKeyReady === false
+            ? `<button type="button" class="item" data-act="keys" style="margin-top:6px;background:color-mix(in srgb, var(--warn) 14%, var(--surface));color:var(--warn);font-weight:700">${icon('settings')}<span>NovelAI 키가 없어요 — 공통 설정에서 넣기</span></button>`
+            : '';
+        root.innerHTML = siteSwitch + keyWarn + `
             <div class="card" style="margin-top:6px">
                 <label class="toggle"><span class="t">켜기<small>답변 아래 삽화 버튼 표시</small></span><span class="switch"><input type="checkbox" id="pp-enabled" ${on ? 'checked' : ''}><span></span></span></label>
                 <label class="toggle"><span class="t">퀵 패널<small>화면에 떠 있는 작은 조작판</small></span><span class="switch"><input type="checkbox" id="pp-quick" ${state.quickPanel ? 'checked' : ''}><span></span></span></label>
@@ -112,8 +116,8 @@ async function render() {
             <div class="sep"></div>
             <div class="site"><b>${esc(state.platformName)}</b><span class="${state.dom?.ok ? 'ok' : 'warn'}">${esc(state.dom?.text || '')}</span></div>
             ${item('pick-body', 'crosshair', '본문 위치 지정', mark(state.hasBody))}
-            ${item('pick-footer', 'footer', '하단 위치 지정', mark(state.hasFooter, '자동'))}
-            ${item('pick-user', 'userx', '내 메시지 제외 지정', mark(state.hasUser, '선택'))}
+            ${item('pick-footer', 'footer', '하단 위치 지정', mark(state.hasFooter))}
+            ${item('pick-user', 'userx', '내 메시지 제외 지정', mark(state.hasUser))}
             ${item('check', 'check', '위치 확인 · 자동 진단')}
             ${item('reset-site', 'refresh', '위치 초기화')}
             ${state.isUnivers ? item('import-legacy', 'download', '유저스크립트 기록 가져오기') : ''}
@@ -144,8 +148,8 @@ function bindCommon() {
     });
     root.querySelectorAll('.item[data-act]').forEach(b => b.onclick = async () => {
         const act = b.dataset.act;
-        if (act === 'manager') {
-            await chrome.runtime.sendMessage({ type: 'manager.open', payload: {} });
+        if (act === 'manager' || act === 'keys') {
+            await chrome.runtime.sendMessage({ type: 'manager.open', payload: act === 'keys' ? { hash: 'keys' } : {} });
             window.close();
             return;
         }
@@ -155,4 +159,5 @@ function bindCommon() {
     });
 }
 
+try { document.getElementById('ver').textContent = 'v' + chrome.runtime.getManifest().version; } catch (_) {}
 render();

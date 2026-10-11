@@ -24,6 +24,49 @@
         try { return !!chrome.runtime?.id; } catch (_) { return false; }
     }
 
+    // 확장을 업데이트/새로고침하면 이미 열려 있던 탭의 이 스크립트는 확장과 끊긴다.
+    // 그 상태에서 chrome.* 을 부르면 "Extension context invalidated" 오류가 난다.
+    // → 끊긴 걸 알아채면 한 번만 안내를 띄우고, 이후 확장 기능 호출은 조용히 건너뛴다.
+    let staleNotified = false;
+    function notifyStale() {
+        if (staleNotified) return;
+        staleNotified = true;
+        try {
+            const bar = document.createElement('div');
+            bar.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:2147483647;display:flex;gap:10px;align-items:center;padding:10px 12px 10px 16px;border-radius:14px;background:#2a2118;color:#f6ecdc;font:600 13px/1.4 "Pretendard","Malgun Gothic",system-ui,sans-serif;box-shadow:0 12px 30px rgba(0,0,0,.35)';
+            bar.innerHTML = '<span>Vignette가 업데이트됐어요. 이 탭을 새로고침하면 다시 동작해요.</span>';
+            const reload = document.createElement('button');
+            reload.textContent = '새로고침';
+            reload.style.cssText = 'all:unset;cursor:pointer;padding:5px 11px;border-radius:9px;background:#e8833a;color:#fff;font-weight:700';
+            reload.onclick = () => location.reload();
+            const close = document.createElement('button');
+            close.textContent = '✕';
+            close.style.cssText = 'all:unset;cursor:pointer;padding:4px 6px;opacity:.7';
+            close.onclick = () => bar.remove();
+            bar.append(reload, close);
+            document.documentElement.appendChild(bar);
+        } catch (_) {}
+    }
+    // 확장 호출 전에 확인: 끊겼으면 안내하고 false
+    function ensureAlive() {
+        if (isContextAlive()) return true;
+        notifyStale();
+        return false;
+    }
+    // 어디선가 놓친 끊김 오류는 콘솔/확장 오류 목록에 남기지 않고 안내로 바꾼다
+    window.addEventListener('unhandledrejection', (e) => {
+        if (/Extension context invalidated/i.test(String(e.reason?.message || e.reason || ''))) {
+            e.preventDefault();
+            notifyStale();
+        }
+    });
+    window.addEventListener('error', (e) => {
+        if (/Extension context invalidated/i.test(String(e.message || ''))) {
+            e.preventDefault();
+            notifyStale();
+        }
+    });
+
     function scheduleFlush() {
         if (flushTimer) return;
         flushTimer = setTimeout(flush, 60);
@@ -31,12 +74,12 @@
 
     function flush() {
         flushTimer = 0;
-        if (!isContextAlive()) { extAlive = false; return; }
+        if (!isContextAlive()) { extAlive = false; notifyStale(); return; }
         if (pendingSet.size) {
             const batch = {};
             pendingSet.forEach((v, k) => { batch[LS_PREFIX + k] = v; });
             pendingSet.clear();
-            chrome.storage.local.set(batch).catch(err => console.warn('[Scene Painter] storage write failed', err));
+            chrome.storage.local.set(batch).catch(err => console.info('[Vignette] storage write failed', err));
         }
         if (pendingRemove.size) {
             const keys = Array.from(pendingRemove).map(k => LS_PREFIX + k);
@@ -123,7 +166,7 @@
     }
 
     async function saveSiteConfig(patch) {
-        if (!platform) return;
+        if (!platform || !ensureAlive()) return;
         const res = await chrome.storage.local.get(P.SITES_KEY);
         const all = res[P.SITES_KEY] || {};
         const base = all[platform.id] || { ...platform };
@@ -186,6 +229,7 @@
     function rpc(type, payload) {
         return new Promise((resolve, reject) => {
             if (!isContextAlive()) {
+                notifyStale();
                 reject(new Error('확장 프로그램이 업데이트/재시작됐어요. 페이지를 새로고침해줘.'));
                 return;
             }
@@ -419,6 +463,8 @@
 .csp-picker-lists .ok li::before{content:"✔ ";color:#7fd39a}.csp-picker-lists .no li::before{content:"✘ ";color:#ff8a7a}
 .csp-picker-live{font-size:12px;padding:5px 8px;border-radius:8px;background:#3a2d20}
 .csp-picker-live.is-warn{background:#5a2e22}
+.csp-picker-bar.is-shake{animation:csp-picker-shake .35s ease}
+@keyframes csp-picker-shake{20%{transform:translateX(calc(-50% - 7px))}40%{transform:translateX(calc(-50% + 6px))}60%{transform:translateX(calc(-50% - 4px))}80%{transform:translateX(calc(-50% + 2px))}}
 .csp-picker-keys{opacity:.7;font-size:11.5px}
 .csp-picker-path{font:11px/1.4 ui-monospace,monospace;opacity:.6;word-break:break-all;max-height:30px;overflow:hidden}
 .csp-picker-btns{display:flex;gap:6px;flex-wrap:wrap}
@@ -468,13 +514,29 @@
             let liveTimer = 0;
 
             // 본문인데 문단 하나를 가리키면(옆에 같은 모양 형제가 여럿) 문단들을 품은 부모로 올린다.
+            //  · 혼자 들어 있는 감싸기 칸(div > span 처럼)은 먼저 건너뛰고 올라간다
+            //  · 같은 모양 형제가 있는 층(= 문단 층)을 만나면 그 부모가 본문
+            // 확장이 붙인 요소(삽화 버튼 줄 · 삽화 이미지)는 구조 판단에서 뺀다
+            // (잘못 고른 뒤 다시 고를 때, 이미 붙은 자동 줄 때문에 판단이 틀어졌다)
+            const isExtEl = (c) => typeof c.className === 'string' && c.className.includes('csp-');
+            const kids = (p) => Array.from(p.children).filter(c => !isExtEl(c));
+            const textOf = (n) => {
+                let len = 0;
+                n.childNodes.forEach(c => { if (c.nodeType === 3) len += c.textContent.trim().length; else if (c.nodeType === 1 && !isExtEl(c)) len += textOf(c); });
+                return len;
+            };
             const promoteToBody = (el) => {
                 let cur = el;
-                for (let i = 0; i < 4 && cur?.parentElement && cur.parentElement !== document.body; i++) {
+                let promoted = false;
+                for (let i = 0; i < 6 && cur?.parentElement && cur.parentElement !== document.body; i++) {
+                    const parent = cur.parentElement;
                     const sig = sigOf(cur);
-                    const same = Array.from(cur.parentElement.children).filter(c => c !== cur && sigOf(c) === sig && (c.textContent || '').trim());
-                    if (!same.length) break;
-                    cur = cur.parentElement;
+                    const same = kids(parent).filter(c => c !== cur && sigOf(c) === sig && textOf(c));
+                    if (same.length) { cur = parent; promoted = true; continue; }
+                    if (promoted) break;
+                    // 형제 없이 혼자 감싸진 칸이면 한 칸 올라가서 다시 본다 (단, 글이 훨씬 많은 큰 덩어리로는 안 올라감)
+                    if (kids(parent).length === 1 && textOf(parent) <= textOf(cur) + 12) { cur = parent; continue; }
+                    break;
                 }
                 return cur;
             };
@@ -518,12 +580,30 @@
                 if (!el) { box.style.display = 'none'; return; }
                 const r = el.getBoundingClientRect();
                 Object.assign(box.style, { display: 'block', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+                // 가리킨 칸이 안내창 밑에 깔리면 안내창을 반대쪽(위↔아래)으로 비켜 준다
+                const visTop = Math.max(r.top, 0), visBottom = Math.min(r.bottom, innerHeight);
+                const hits = (b) => visTop < b.bottom + 12 && visBottom > b.top - 12 && r.left < b.right && r.right > b.left;
+                if (hits(bar.getBoundingClientRect())) {
+                    bar.classList.toggle('is-bottom');
+                    // 옮겨도 겹치면(아주 큰 칸) 원래 자리로
+                    if (hits(bar.getBoundingClientRect())) bar.classList.toggle('is-bottom');
+                }
                 bar.querySelector('.csp-picker-path').textContent = sigOf(el).slice(0, 160) + `  ·  글자 ${(el.textContent || '').trim().length}`;
                 updateLive();
             };
             const isOurs = (t) => t === bar || bar.contains(t) || t === box;
+            // 안내창 밑에 고를 칸이 깔려 있으면: 버튼이 아닌 곳에 마우스를 잠깐 올려 두면 반대쪽으로 비켜난다
+            let dodgeTimer = 0;
+            bar.addEventListener('mousemove', (e) => {
+                clearTimeout(dodgeTimer);
+                if (e.target.closest('button')) return;
+                dodgeTimer = setTimeout(() => bar.classList.toggle('is-bottom'), 350);
+            });
+            bar.addEventListener('mouseleave', () => clearTimeout(dodgeTimer));
+            // 페이지 전체(html/body)는 고를 수 없다 — 빈 여백 위에 마우스가 있으면 이전 대상을 유지
+            const isPageRoot = (t) => !t || t === document.documentElement || t === document.body;
             const onMove = (e) => {
-                if (isOurs(e.target)) return;
+                if (isOurs(e.target) || isPageRoot(e.target)) return;
                 if (hovered !== e.target) { hovered = e.target; depth = 0; }
                 draw();
             };
@@ -541,30 +621,27 @@
                 document.removeEventListener('mouseup', block, true);
                 document.removeEventListener('keydown', onKey, true);
                 document.removeEventListener('wheel', onWheel, { capture: true });
-                box.remove(); bar.remove();
-                setTimeout(() => style.remove(), 2600);
+                box.remove(); bar.remove(); style.remove();
                 resolve(result);
+            };
+            // 잘못된 선택은 저장하지 않고 그 자리에서 다시 고르게 한다
+            const refuse = (msg) => {
+                const live = bar.querySelector('.csp-picker-live');
+                live.textContent = msg;
+                live.classList.add('is-warn');
+                bar.classList.remove('is-shake'); void bar.offsetWidth; bar.classList.add('is-shake');
             };
             const confirm = () => {
                 const el = current();
-                if (!el) return;
+                if (isPageRoot(el)) { refuse('⚠️ 그 자리는 고를 수 없어. 답변 글 위에 마우스를 올리고 다시 클릭해 줘.'); return; }
                 const selector = buildSelector(el);
                 let count = 0;
-                try {
-                    const all = document.querySelectorAll(selector);
-                    count = all.length;
-                    // 잡힌 요소들을 잠깐 보여 준다
-                    all.forEach(m => {
-                        const r = m.getBoundingClientRect();
-                        if (r.bottom < 0 || r.top > innerHeight) return;
-                        const p = document.createElement('div');
-                        p.className = 'csp-picker-box is-peer';
-                        Object.assign(p.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
-                        document.documentElement.appendChild(p);
-                        setTimeout(() => p.remove(), 2500);
-                    });
-                } catch (_) {}
-                cleanup({ selector, count });
+                try { count = selector ? document.querySelectorAll(selector).length : 0; } catch (_) {}
+                if (!selector || !count) { refuse('⚠️ 이 칸으로는 찾을 수 있는 곳이 없어. 다른 곳을 클릭해 줘.'); return; }
+                if (kind !== 'footer' && (el.textContent || '').trim().length < 8) { refuse('⚠️ 글이 거의 없는 칸이야. 답변 글 위를 클릭하거나 ▲로 범위를 넓혀 줘.'); return; }
+                if (kind === 'footer' && !el.querySelector('button, [role="button"], a') && !el.matches('button, [role="button"], a')) { refuse('⚠️ 버튼이 없는 칸이야. 복사·재생성 같은 버튼 줄을 클릭해 줘.'); return; }
+                // 잡힌 곳 표시는 코어의 "저장됨" 반응이 맡는다 (여기서 따로 그리면 두 번 겹쳐 보였다)
+                cleanup({ selector, count, picked: el });
             };
             const block = (e) => { if (isOurs(e.target)) return; e.preventDefault(); e.stopPropagation(); };
             const onClick = (e) => {
@@ -582,7 +659,8 @@
                     return;
                 }
                 e.preventDefault(); e.stopPropagation();
-                hovered = hovered || e.target;
+                // 클릭한 곳을 기준으로 한다 (예전엔 마우스가 마지막으로 지나간 곳을 써서 엉뚱한 칸이 잡혔다)
+                if (!isPageRoot(e.target) && e.target !== hovered) { hovered = e.target; depth = 0; draw(); }
                 confirm();
             };
             const onKey = (e) => {
@@ -630,10 +708,12 @@
         // core가 등록: 확장 패널(팝업)에서 온 요청을 처리한다
         setPanelHandler(fn) { panelHandler = fn; },
         async getSiteUi() {
+            if (!isContextAlive()) return {};
             const res = await chrome.storage.local.get(SITE_UI_KEY);
             return (res[SITE_UI_KEY] || {})[platform?.id || location.hostname] || {};
         },
         async setSiteUi(patch) {
+            if (!isContextAlive()) return;
             const res = await chrome.storage.local.get(SITE_UI_KEY);
             const all = res[SITE_UI_KEY] || {};
             const id = platform?.id || location.hostname;
@@ -690,7 +770,7 @@
         try {
             coreFactory(lsShim, GM_xmlhttpRequest, CSP_EXT);
         } catch (err) {
-            console.error('[Scene Painter] core start failed', err);
+            console.error('[Vignette] core start failed', err);
         }
         touchChat();
         // SPA 이동 감지 → 채팅방 색인 갱신

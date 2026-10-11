@@ -196,6 +196,10 @@ const hasImages = (r) => r.images.length > 0;
 function renderNavCounts() {
     $('#nav-chats').textContent = Array.from(state.rooms.values()).filter(hasImages).length || '';
     $('#nav-images').textContent = state.images.length || '';
+    const ks = keyStatus();
+    const navKeys = $('#nav-keys');
+    navKeys.textContent = ks.nai && ks.analysis ? '' : '!';
+    navKeys.className = ks.nai && ks.analysis ? '' : 'is-warn';
 }
 
 // 예전엔 navigator.storage.estimate()만 써서 "20KB"처럼 나왔다 — 그건 설정·기록(chrome.storage)이
@@ -843,6 +847,183 @@ function renderBackup() {
     };
 }
 
+// ── 공통 설정 · API 키 ───────────────────────────────────────
+// 채팅방 설정창의 API 탭과 같은 저장값(전역 설정)을 고친다. 모든 사이트 · 모든 채팅이 같이 쓴다.
+const PROVIDERS = [
+    { value: 'ai-studio', name: 'Google Gemini (AI Studio)', fields: [['googleApiKey', 'API Key', 'secret'], ['googleModel', '모델', 'text', 'gemini-3.8-flash']] },
+    { value: 'vertex', name: 'Google Gemini (Vertex AI)', fields: [['vertexProjectId', 'Project ID', 'text'], ['vertexLocation', 'Location', 'text', 'us-central1'], ['vertexAccessToken', 'Access Token', 'secret'], ['googleModel', '모델', 'text']] },
+    { value: 'firebase', name: 'Google Gemini (Firebase)', fields: [['firebaseConfigJson', 'Firebase Config (JSON)', 'textarea'], ['firebaseLocation', 'Location', 'text', 'global'], ['googleModel', '모델', 'text']] },
+    { value: 'openai', name: 'OpenAI', fields: [['openaiApiKey', 'API Key', 'secret'], ['openaiModel', '모델', 'text']] },
+    { value: 'anthropic', name: 'Anthropic Claude', fields: [['anthropicApiKey', 'API Key', 'secret'], ['claudeModel', '모델', 'text']] },
+    { value: 'glm', name: 'GLM (Zhipu AI)', fields: [['glmApiKey', 'API Key', 'secret'], ['glmModel', '모델', 'text']] },
+    { value: 'deepseek', name: 'DeepSeek', fields: [['deepseekApiKey', 'API Key', 'secret'], ['deepseekModel', '모델', 'text']] },
+    { value: 'openrouter', name: 'OpenRouter', fields: [['openrouterApiKey', 'API Key', 'secret'], ['openrouterModel', '모델', 'text']] },
+    { value: 'custom', name: '커스텀 엔드포인트 (OpenAI 호환)', fields: [['customApiUrl', '주소 (URL)', 'text', 'https://…/v1'], ['customApiKey', 'API Key', 'secret'], ['customModel', '모델', 'text'], ['customAuthMode', '인증 방식', 'auth']] }
+];
+const KEY_FIELD_OF = { 'ai-studio': 'googleApiKey', vertex: 'vertexAccessToken', firebase: 'firebaseConfigJson', openai: 'openaiApiKey', anthropic: 'anthropicApiKey', glm: 'glmApiKey', deepseek: 'deepseekApiKey', openrouter: 'openrouterApiKey', custom: 'customApiKey' };
+
+function readGlobalSettings() {
+    return decodeJson(state.store[LS + GLOBAL_SETTINGS], {});
+}
+
+// 키 상태: NAI + 지금 고른 분석 AI 둘 다 있어야 생성이 된다
+function keyStatus(g = readGlobalSettings()) {
+    const provider = g.geminiProvider || 'ai-studio';
+    const analysisKey = provider === 'custom' && g.customAuthMode === 'none' ? 'none' : String(g[KEY_FIELD_OF[provider]] || '').trim();
+    return { nai: !!String(g.naiApiKey || '').trim(), analysis: !!analysisKey, provider };
+}
+
+const KEY_ICONS = {
+    image: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>',
+    brain: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>',
+    eye: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+    eyeOff: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-2.2 3.2"/><path d="M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2"/></svg>',
+    info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
+};
+
+// 공급자별 키 받는 곳 안내
+const PROVIDER_HINTS = {
+    'ai-studio': 'Google AI Studio › Get API key 에서 발급해요.',
+    vertex: 'Google Cloud 프로젝트 ID와 OAuth Access Token이 필요해요.',
+    firebase: 'Firebase 콘솔 › 프로젝트 설정의 웹 앱 config(JSON)를 붙여 넣어요.',
+    openai: 'platform.openai.com › API keys 에서 발급해요.',
+    anthropic: 'console.anthropic.com › API Keys 에서 발급해요.',
+    glm: 'Zhipu AI(bigmodel.cn / z.ai) 콘솔에서 발급해요.',
+    deepseek: 'platform.deepseek.com › API keys 에서 발급해요.',
+    openrouter: 'openrouter.ai › Keys 에서 발급해요. 여러 회사 모델을 한 키로 써요.',
+    custom: 'OpenAI 호환 서버 주소와 그 서버의 키를 넣어요. 키가 필요 없는 서버면 인증 방식을 "인증 없음"으로.'
+};
+
+function renderKeys() {
+    const main = $('#main');
+    const g = readGlobalSettings();
+    const st = keyStatus(g);
+    const provider = st.provider;
+    const pv = PROVIDERS.find(p => p.value === provider) || PROVIDERS[0];
+
+    const fieldHtml = ([key, label, type, placeholder = '']) => {
+        const v = esc(g[key] ?? '');
+        let input;
+        if (type === 'textarea') {
+            input = `<textarea class="key-input" data-key="${key}" rows="5" spellcheck="false" placeholder="${esc(placeholder)}">${v}</textarea>`;
+        } else if (type === 'auth') {
+            input = `<select data-key="${key}">${[['bearer', 'Authorization: Bearer'], ['x-api-key', 'x-api-key'], ['api-key', 'api-key'], ['none', '인증 없음']]
+                .map(([val, t]) => `<option value="${val}" ${(g[key] || 'bearer') === val ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+        } else if (type === 'secret') {
+            input = `<div class="secret-field">
+                <input class="key-input mono" type="password" data-key="${key}" value="${v}" spellcheck="false" autocomplete="off" placeholder="${esc(placeholder || '붙여 넣기')}">
+                <button type="button" class="secret-eye" data-reveal aria-label="키 보기" title="키 보기">${KEY_ICONS.eye}</button>
+            </div>`;
+        } else {
+            input = `<input class="key-input${/model|Model|Url|Location|Project/.test(key) ? ' mono' : ''}" type="text" data-key="${key}" value="${v}" spellcheck="false" autocomplete="off" placeholder="${esc(placeholder)}">`;
+        }
+        return `<div class="key-field"><label>${esc(label)}</label>${input}</div>`;
+    };
+
+    const pill = (ok, okText, noText) => `<span class="key-pill ${ok ? 'is-ok' : 'is-missing'}">${ok ? '✓' : '✕'} ${ok ? okText : noText}</span>`;
+    const ready = st.nai && st.analysis;
+    const missing = [!st.nai && 'NovelAI 키', !st.analysis && '장면 분석 AI 키'].filter(Boolean);
+
+    main.innerHTML = `
+        <div class="keys-page">
+            <div class="page-head"><div><h1>공통 설정 · API 키</h1>
+                <p>여기 넣은 값은 <b>모든 사이트 · 모든 채팅</b>에서 같이 써요. 채팅방 🎨 › 설정 › API 탭과 같은 값이에요.</p></div></div>
+
+            <div class="ready-banner ${ready ? 'is-ok' : 'is-warn'}">
+                <span class="ready-icon">${ready ? '✓' : '!'}</span>
+                <div><b>${ready ? '삽화를 만들 준비가 됐어요' : `${missing.join('와 ')}가 필요해요`}</b>
+                <small>${ready ? '어느 채팅 사이트에서든 바로 생성할 수 있어요.' : '두 키가 모두 있어야 장면을 분석하고 그림을 그릴 수 있어요.'}</small></div>
+            </div>
+
+            <section class="key-card">
+                <header>
+                    <span class="key-card-icon">${KEY_ICONS.image}</span>
+                    <div class="key-card-title"><b>NovelAI</b><small>이미지 생성</small></div>
+                    ${pill(st.nai, '키 있음', '키 없음')}
+                </header>
+                <div class="key-grid">
+                    ${fieldHtml(['naiApiKey', 'API Key / Persistent Token', 'secret', 'pst-…'])}
+                    <div class="key-field"><label>모델</label>
+                        <select data-key="naiModel">${['nai-diffusion-5-full', 'nai-diffusion-5-curated', 'nai-diffusion-4-5-full', 'nai-diffusion-4-5-curated', 'nai-diffusion-4-full', 'nai-diffusion-4-curated-preview', 'nai-diffusion-3', 'nai-diffusion-furry-3']
+                            .map(m => `<option value="${m}" ${(g.naiModel || 'nai-diffusion-5-full') === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+                </div>
+                <p class="key-hint">novelai.net › 계정 설정 › Get Persistent API Token 에서 발급해요.</p>
+            </section>
+
+            <section class="key-card">
+                <header>
+                    <span class="key-card-icon">${KEY_ICONS.brain}</span>
+                    <div class="key-card-title"><b>장면 분석 AI</b><small>답변을 읽고 그릴 장면 · 프롬프트를 정해요</small></div>
+                    ${pill(st.analysis, '키 있음', '키 없음')}
+                </header>
+                <div class="key-grid">
+                    <div class="key-field is-wide"><label>공급자</label>
+                        <select data-key="geminiProvider" id="kp-provider">${PROVIDERS.map(p => `<option value="${p.value}" ${p.value === provider ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
+                    ${pv.fields.map(f => fieldHtml(f).replace('class="key-field"', `class="key-field${f[2] === 'textarea' || f[0] === 'customApiUrl' ? ' is-wide' : ''}"`)).join('')}
+                </div>
+                <p class="key-hint">${esc(PROVIDER_HINTS[provider] || '')}</p>
+            </section>
+
+            <section class="key-note">
+                <span class="key-note-icon">${KEY_ICONS.info}</span>
+                <div><b>유저스크립트에서 쓰던 키가 있다면</b>
+                <small>유니챗 채팅방에서 🎨 › <b>유저스크립트 기록 가져오기</b>를 누르면 키 · 프리셋 · 방별 설정 · 이미지가 한 번에 넘어와요.</small></div>
+            </section>
+
+            <div class="save-bar" id="kp-bar">
+                <span id="kp-msg">변경사항이 없어요</span>
+                <button class="btn ghost" id="kp-revert" disabled>되돌리기</button>
+                <button class="btn primary" id="kp-save" disabled>저장</button>
+            </div>
+        </div>`;
+
+    const bar = $('#kp-bar');
+    const setDirty = (dirty) => {
+        bar.classList.toggle('is-dirty', dirty);
+        $('#kp-save').disabled = !dirty;
+        $('#kp-revert').disabled = !dirty;
+        $('#kp-msg').textContent = dirty ? '저장하지 않은 변경사항이 있어요' : '변경사항이 없어요';
+    };
+    const initial = JSON.stringify(collectKeyForm());
+    const page = $('.keys-page');
+    page.addEventListener('input', () => setDirty(JSON.stringify(collectKeyForm()) !== initial));
+    page.addEventListener('change', () => setDirty(JSON.stringify(collectKeyForm()) !== initial));
+    if (renderKeys._pendingDirty) { setDirty(true); renderKeys._pendingDirty = false; }
+
+    $('#kp-provider').onchange = (e) => {
+        // 공급자를 바꾸면 그 공급자 칸을 보여 준다 (저장 전 입력값은 유지)
+        const draft = collectKeyForm();
+        state.store[LS + GLOBAL_SETTINGS] = encodeJson({ ...readGlobalSettings(), ...draft, geminiProvider: e.target.value });
+        renderKeys._pendingDirty = true;
+        renderKeys();
+    };
+    $$('[data-reveal]', main).forEach(b => b.onclick = () => {
+        const input = b.previousElementSibling;
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        b.innerHTML = show ? KEY_ICONS.eyeOff : KEY_ICONS.eye;
+        b.title = show ? '키 숨기기' : '키 보기';
+    });
+    $('#kp-revert').onclick = async () => { await loadAll(); renderKeys(); };
+    const save = async () => {
+        if ($('#kp-save').disabled) return;
+        const fresh = decodeJson((await chrome.storage.local.get(LS + GLOBAL_SETTINGS))[LS + GLOBAL_SETTINGS], {});
+        const next = { ...fresh, ...collectKeyForm() };
+        await chrome.storage.local.set({ [LS + GLOBAL_SETTINGS]: encodeJson(next) });
+        await loadAll();
+        renderKeys();
+        toast('저장했어요. 열려 있는 채팅 탭에도 바로 적용돼요.');
+    };
+    $('#kp-save').onclick = save;
+    page.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); } });
+}
+
+function collectKeyForm() {
+    const out = {};
+    $$('#main [data-key]').forEach(el => { out[el.dataset.key] = String(el.value || '').trim(); });
+    return out;
+}
+
 // ── 환경설정 ─────────────────────────────────────────────────
 function renderPrefs() {
     const main = $('#main');
@@ -925,6 +1106,7 @@ function route() {
     $$('.nav a').forEach(a => a.classList.toggle('is-active', a.dataset.view === view));
     if (hash.startsWith('chat=')) renderChat(hash.slice(5));
     else if (view === 'gallery') renderGallery();
+    else if (view === 'keys') renderKeys();
     else if (view === 'sites') renderSites();
     else if (view === 'backup') renderBackup();
     else if (view === 'prefs') renderPrefs();
@@ -958,4 +1140,5 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && refreshPending) scheduleRefresh(); });
 
+try { $('#ver').textContent = 'v' + chrome.runtime.getManifest().version; } catch (_) {}
 loadAll().then(route);

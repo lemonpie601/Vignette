@@ -225,7 +225,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
                     ? serverRetryAfter + 1  // 서버 지정 시간 + 1초 여유
                     : Math.round((baseDelayMs * Math.pow(2, attempt) + Math.random() * 1000) / 1000);
                 const delay = delaySec * 1000;
-                console.warn(`[Uni Scene Painter] ${label} 재시도 ${attempt + 1}/${maxRetries} — ${delaySec}초 후 재시도. 원인: ${msg.slice(0, 120)}`);
+                console.info(`[Vignette] ${label} 재시도 ${attempt + 1}/${maxRetries} — ${delaySec}초 후 재시도. 원인: ${msg.slice(0, 120)}`);
                 // HUD에 재시도 상태 표시
                 if (typeof updateTaskHud === 'function') {
                     updateTaskHud({ title: `재시도 중 (${attempt + 1}/${maxRetries})`, message: `${label} 오류로 ${delaySec}초 후 재시도해. 원인: ${msg.slice(0, 80)}` });
@@ -304,7 +304,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
         });
         const text = (data?.choices || []).map(c => c.message?.content || '').join('\n').trim();
         if (!text) {
-            console.warn('[Uni Scene Painter] GLM 응답 디버그:', JSON.stringify({
+            console.info('[Vignette] GLM 응답 디버그:', JSON.stringify({
                 choices: (data?.choices || []).map(c => ({
                     finish_reason: c.finish_reason,
                     content: c.message?.content,
@@ -347,7 +347,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
             all[key] = quirks;
             localStorage.setItem(OPENAI_PARAM_QUIRKS_KEY, JSON.stringify(all));
         } catch (err) {
-            console.warn('[Uni Scene Painter] 파라미터 호환 정보 저장 실패:', err);
+            console.info('[Vignette] 파라미터 호환 정보 저장 실패:', err);
         }
     }
 
@@ -422,7 +422,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
                 else if (rejected === 'response_format' && !quirks.noResponseFormat && request.responseFormat) { quirks.noResponseFormat = true; fixed = true; }
                 if (!fixed) throw err;
                 saveOpenAiParamQuirks(quirkKey, { ...quirks });
-                console.warn(`[Uni Scene Painter] ${request.model}: '${rejected}' 파라미터를 거부해서 고쳐서 다시 보냅니다.`, { ...quirks });
+                console.info(`[Vignette] ${request.model}: '${rejected}' 파라미터를 거부해서 고쳐서 다시 보냅니다.`, { ...quirks });
             }
         }
 
@@ -451,7 +451,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
         });
         const text = (data?.content || []).map(c => c.text || '').join('\n').trim();
         if (!text) {
-            console.warn('[Uni Scene Painter] Anthropic 응답 디버그:', JSON.stringify({
+            console.info('[Vignette] Anthropic 응답 디버그:', JSON.stringify({
                 stop_reason: data?.stop_reason,
                 content: data?.content,
                 error: data?.error
@@ -640,7 +640,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
         try {
             localStorage.setItem(GEMINI_USAGE_STORE_KEY, JSON.stringify(normalizeGeminiUsage(usage)));
         } catch (err) {
-            console.warn('[Uni Scene Painter] Gemini usage save failed:', err);
+            console.info('[Vignette] Gemini usage save failed:', err);
         }
     }
 
@@ -793,7 +793,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
         addGeminiUsage(model, 0, 0, { countOnly: true });
         if (!geminiUsageMissingWarned) {
             geminiUsageMissingWarned = true;
-            console.warn('[Uni Scene Painter] 응답에 토큰 사용량 정보가 없어 요청 수만 집계합니다.', Object.keys(body || {}));
+            console.info('[Vignette] 응답에 토큰 사용량 정보가 없어 요청 수만 집계합니다.', Object.keys(body || {}));
         }
     }
 
@@ -1000,9 +1000,9 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
         const _elapsed = Math.round((Date.now() - _startedAt) / 100) / 10;
         // 어떤 호출이 느린지 눈에 보이게 — 오래 걸리면 추론 강도/프록시를 의심할 수 있다.
         if (_elapsed >= 20) {
-            console.warn(`[Uni Scene Painter] ${provider} 응답이 ${_elapsed}초 걸렸습니다 (model: ${_model || '?'}). 설정의 추론 강도를 낮추거나 엔드포인트를 확인해보세요.`);
+            console.info(`[Vignette] ${provider} 응답이 ${_elapsed}초 걸렸습니다 (model: ${_model || '?'}). 설정의 추론 강도를 낮추거나 엔드포인트를 확인해보세요.`);
         } else {
-            console.log(`[Uni Scene Painter] ${provider} 응답 ${_elapsed}초 (model: ${_model || '?'})`);
+            console.log(`[Vignette] ${provider} 응답 ${_elapsed}초 (model: ${_model || '?'})`);
         }
         try { trackGeminiUsage(_model, _result); } catch (_) {}
         return _result;
@@ -1228,7 +1228,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
         // 사용자가 Firebase Config를 넣어둔 상태에서 provider가 Vertex로 남아 있으면
         // OAuth 직접 호출 대신 Firebase AI Logic 경유로 강제합니다.
         if (provider === 'vertex' && hasFirebaseConfig) {
-            console.warn('[Uni Scene Painter] Vertex provider가 저장돼 있지만 Firebase Config가 있어서 Firebase AI Logic으로 강제 전환합니다.');
+            console.info('[Vignette] Vertex provider가 저장돼 있지만 Firebase Config가 있어서 Firebase AI Logic으로 강제 전환합니다.');
             provider = 'firebase';
         }
 
@@ -1387,7 +1387,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
                 return encoded.length < json.length ? encoded : json;
             }
         } catch (err) {
-            console.warn('[Uni Scene Painter] JSON compression failed, saving raw JSON:', err);
+            console.info('[Vignette] JSON compression failed, saving raw JSON:', err);
         }
         return json;
     }
@@ -1404,7 +1404,7 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
                     return JSON.parse(json);
                 }
             } catch (err) {
-                console.warn('[Uni Scene Painter] compressed JSON decode failed:', err);
+                console.info('[Vignette] compressed JSON decode failed:', err);
                 return fallback;
             }
         }
@@ -1480,12 +1480,12 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
                 const afterKb = getStringSizeKb(encoded);
                 if (afterKb !== beforeKb) changed += 1;
             } catch (err) {
-                console.warn('[Uni Scene Painter] local JSON compression migration failed:', key, err);
+                console.info('[Vignette] local JSON compression migration failed:', key, err);
             }
         });
 
         if (changed) {
-            console.log(`[Uni Scene Painter] localStorage JSON 압축 마이그레이션 완료: ${changed}개`);
+            console.log(`[Vignette] localStorage JSON 압축 마이그레이션 완료: ${changed}개`);
         }
         return changed;
     }
@@ -3786,7 +3786,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
         try {
             setLocalJsonStorage(GLOBAL_SETTINGS_KEY, normalizeGlobalSettings(settings));
         } catch (err) {
-            console.warn('[Uni Scene Painter] global settings save failed:', err);
+            console.info('[Vignette] global settings save failed:', err);
             if (isQuotaExceededError(err)) {
                 throw new Error('전역 설정 저장 실패: 브라우저 저장공간(localStorage)이 가득 찼어요. 삽화 기록을 정리하거나 저장소 관리에서 압축을 실행해줘.');
             }
@@ -3806,7 +3806,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
         saved.geminiProvider = 'firebase';
         saved.vertexAccessToken = '';
         setLocalJsonStorage(GLOBAL_SETTINGS_KEY, normalizeGlobalSettings(saved));
-        console.warn('[Uni Scene Painter] Firebase Config가 있어서 Gemini provider를 firebase로 자동 보정했습니다.');
+        console.info('[Vignette] Firebase Config가 있어서 Gemini provider를 firebase로 자동 보정했습니다.');
     }
 
     function getRoomSettings() {
@@ -3823,7 +3823,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
         try {
             setLocalJsonStorage(getRoomSettingsKey(), normalizeRoomSettings(settings));
         } catch (err) {
-            console.warn('[Uni Scene Painter] room settings save failed:', err);
+            console.info('[Vignette] room settings save failed:', err);
             if (isQuotaExceededError(err)) {
                 throw new Error('캐릭터 슬롯 저장 실패: 브라우저 저장공간(localStorage)이 가득 찼어요. 긴 태그/퀵슬롯/삽화 기록을 정리해줘.');
             }
@@ -3914,7 +3914,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
         const archiveId = record.promptArchiveId || makePromptArchiveId(messageKey);
         const payload = buildPromptArchivePayload(record);
         putStoredMeta(archiveId, payload).catch(err => {
-            console.warn('[Uni Scene Painter] prompt archive save failed:', err);
+            console.info('[Vignette] prompt archive save failed:', err);
         });
         return archiveId;
     }
@@ -4004,7 +4004,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
         try {
             setLocalJsonStorage(getSceneRecordsKey(), compact);
         } catch (err) {
-            console.warn('[Uni Scene Painter] localStorage save failed, pruning scene records:', err);
+            console.info('[Vignette] localStorage save failed, pruning scene records:', err);
             const entries = Object.entries(compact).sort(([, a], [, b]) => {
                 const at = Number(a?.createdAt || 0);
                 const bt = Number(b?.createdAt || 0);
@@ -4021,7 +4021,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
                     break;
                 } catch (retryErr) {
                     if (keepCount === 0 || !isQuotaExceededError(retryErr)) {
-                        console.warn('[Uni Scene Painter] scene records save retry failed:', retryErr);
+                        console.info('[Vignette] scene records save retry failed:', retryErr);
                     }
                 }
             }
@@ -4209,7 +4209,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
     async function deleteHistoryItemStorage(item) {
         if (!item) return;
         if (item.imageId) {
-            try { await deleteStoredImage(item.imageId); } catch (err) { console.warn('[Uni Scene Painter] history image delete failed:', err); }
+            try { await deleteStoredImage(item.imageId); } catch (err) { console.info('[Vignette] history image delete failed:', err); }
         }
         if (item.promptArchiveId) {
             try { await deleteStoredMeta(item.promptArchiveId); } catch (_) {}
@@ -4250,7 +4250,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
                     try {
                         await deleteStoredImage(item.imageId);
                     } catch (err) {
-                        console.warn('[Uni Scene Painter] blocked reroll image cleanup failed:', err);
+                        console.info('[Vignette] blocked reroll image cleanup failed:', err);
                     }
                 }
                 throw new Error(`리롤 기록은 최대 ${limit}장까지 보관돼요. 휴지통으로 이미지를 지운 뒤 다시 리롤해줘.`);
@@ -4271,7 +4271,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
                 await putStoredMeta(item.promptArchiveId, payload);
                 promptArchiveMemoryCache.set(item.promptArchiveId, payload);
             } catch (err) {
-                console.warn('[Uni Scene Painter] per-image prompt archive save failed:', err);
+                console.info('[Vignette] per-image prompt archive save failed:', err);
                 delete item.promptArchiveId;
             }
         }
@@ -4301,7 +4301,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
             try {
                 await deleteStoredImage(id);
             } catch (err) {
-                console.warn('[Uni Scene Painter] stored image delete failed:', err);
+                console.info('[Vignette] stored image delete failed:', err);
             }
         }
     }
@@ -4797,7 +4797,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
         if (!base64) {
             const dataUrl = await readReferenceFileAsDataUrl(summary.assetId);
             if (!dataUrl) {
-                console.warn('[Uni Scene Painter] reference asset missing:', summary.assetId);
+                console.info('[Vignette] reference asset missing:', summary.assetId);
                 return null;
             }
             base64 = await resizeReferenceDataUrlToBase64(dataUrl);
@@ -5019,7 +5019,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
                                 delete item.imageUrl;
                                 changed = true;
                             } catch (err) {
-                                console.warn('[Uni Scene Painter] migration history image save failed:', err);
+                                console.info('[Vignette] migration history image save failed:', err);
                             }
                         } else if (itemUrl.startsWith('blob:')) {
                             delete item.imageUrl;
@@ -5038,7 +5038,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
                         delete record.imageUrl;
                         changed = true;
                     } catch (err) {
-                        console.warn('[Uni Scene Painter] migration image save failed:', err);
+                        console.info('[Vignette] migration image save failed:', err);
                     }
                 } else if (rawUrl.startsWith('blob:')) {
                     delete record.imageUrl;
@@ -5049,7 +5049,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
                 try {
                     setLocalJsonStorage(storageKey, stripLargeImageFields(records));
                 } catch (err) {
-                    console.warn('[Uni Scene Painter] migration localStorage save failed, pruning large records:', err);
+                    console.info('[Vignette] migration localStorage save failed, pruning large records:', err);
                     const compact = stripLargeImageFields(records);
                     const entries = Object.entries(compact).sort(([, a], [, b]) => Number(a?.createdAt || 0) - Number(b?.createdAt || 0));
                     for (const keepCount of [20, 12, 8, 5, 3, 1, 0]) {
@@ -5219,7 +5219,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
             return filename;
         } catch (folderErr) {
             // 2순위 fallback: 폴더 권한/핸들이 꼬여도 Reference 자체는 동작해야 하므로 IndexedDB에 저장.
-            console.warn('[Uni Scene Painter] reference folder save failed, falling back to IndexedDB:', folderErr);
+            console.info('[Vignette] reference folder save failed, falling back to IndexedDB:', folderErr);
             const dataUrl = await blobToDataUrl(file);
             await putStoredImage(filename, dataUrl);
             return filename;
@@ -5448,6 +5448,8 @@ ${getCompactNsfwSceneAnalysisGuide()}
     }
 
     function showToast(message) {
+        // 키가 비어서 실패한 거면 일반 알림 대신 "설정 열기" 버튼이 있는 알림으로
+        if (isMissingKeyMessage(message)) { showMissingKeyHelp(message); return; }
         const old = document.getElementById('csp-toast');
         if (old) old.remove();
 
@@ -5565,7 +5567,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
     // CSP UI는 body 직속으로 붙어서 사이트 색 변수를 쓰지 않는다 (사이트마다 다르거나 없다).
     // 자체 팔레트: 'warm'(기본 베이지) · 'dark' · 'light' · 'auto'(시스템 다크 모드 따라가기)
     // 관리 페이지 › 환경설정에서 바꾼다.
-    const CSP_THEMED_ROOT_SELECTOR = '.csp-overlay, .csp-quick-panel, .csp-confirm-backdrop, .csp-task-hud-backdrop, .csp-lightbox-backdrop, .csp-header-menu, .csp-fab, .csp-check-card, .csp-action-toast, .csp-dd-pop';
+    const CSP_THEMED_ROOT_SELECTOR = '.csp-overlay, .csp-quick-panel, .csp-confirm-backdrop, .csp-task-hud-backdrop, .csp-lightbox-backdrop, .csp-header-menu, .csp-fab, .csp-check-card, .csp-action-toast, .csp-dd-pop, .csp-pick-done';
     let cspThemeWatcherStarted = false;
     const CSP_EXT_THEMES = ['warm', 'dark', 'light'];
     const cspDarkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
@@ -5610,7 +5612,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
                 }
             }).observe(document.body, { childList: true });
         } catch (err) {
-            console.warn('[Uni Scene Painter] theme observer failed', err);
+            console.info('[Vignette] theme observer failed', err);
         }
 
         // 관리 페이지에서 테마를 바꾸거나 시스템 다크 모드가 바뀌면 열려 있는 UI도 따라가게.
@@ -7567,6 +7569,14 @@ ${getCompactNsfwSceneAnalysisGuide()}
 .csp-hm-site-state.is-ok { color: var(--csp-green); }
 .csp-hm-site-state.is-warn { color: var(--csp-warn); }
 .csp-header-menu { max-height: calc(100vh - 16px); overflow-y: auto; }
+.csp-hm-count.is-set { background: color-mix(in srgb, var(--csp-green) 16%, var(--csp-surface)); color: var(--csp-green); }
+.csp-hm-count.is-unset { background: #e5484d; color: #fff; min-width: 19px; text-align: center; }
+.csp-fab-btn.needs-setup::after {
+    content: "✕"; position: absolute; top: -5px; right: -5px; width: 18px; height: 18px; border-radius: 50%;
+    display: grid; place-items: center; background: #e5484d; color: #fff; font: 800 10px/1 system-ui, sans-serif;
+    box-shadow: 0 0 0 2px var(--csp-surface);
+}
+.csp-fab-btn { position: relative; }
 .csp-hm-count { margin-left: auto; padding: 0 7px; border-radius: 999px; background: var(--csp-elev-2); color: var(--csp-muted); font-style: normal; font-size: 11px; font-weight: 700; line-height: 19px; }
 
 /* ── 퀵 패널 ───────────────────────────────────────────────── */
@@ -7831,6 +7841,62 @@ select.is-dd-open { border-color: var(--csp-accent-line) !important; box-shadow:
 .csp-check-box.is-auto span { background: #3b82f6; top: auto; bottom: -20px; border-radius: 0 6px 6px 6px; opacity: .85; }
 .csp-check-box.is-user { border: 2px dashed #8b8b8b; background: rgba(120, 120, 120, .08); }
 .csp-check-box.is-user span { background: #777; }
+/* ── 위치 저장 직후 반응 ───────────────────────────────────── */
+.csp-pick-flash-layer { position: fixed; inset: 0; z-index: 2147483600; pointer-events: none; }
+.csp-pick-flash {
+    position: fixed; border-radius: 8px; border: 2px solid #e8833a; background: rgba(232, 131, 58, .16);
+    box-shadow: 0 0 0 0 rgba(232, 131, 58, .55);
+    animation: csp-pick-pop .5s cubic-bezier(.2, 1.4, .4, 1) both, csp-pick-fade .7s ease 1.5s forwards;
+}
+.csp-pick-flash.is-footer { border-color: #3b82f6; background: rgba(59, 130, 246, .16); box-shadow: 0 0 0 0 rgba(59, 130, 246, .55); }
+.csp-pick-flash.is-user { border: 2px dashed #8b8b8b; background: rgba(120, 120, 120, .14); box-shadow: none; }
+@keyframes csp-pick-pop {
+    0% { opacity: 0; transform: scale(.96); }
+    55% { opacity: 1; transform: scale(1.015); box-shadow: 0 0 0 8px rgba(232, 131, 58, .0); }
+    100% { opacity: 1; transform: scale(1); }
+}
+@keyframes csp-pick-fade { to { opacity: 0; transform: scale(1.01); } }
+
+.csp-pick-done {
+    position: fixed; left: 50%; top: 14px; z-index: 2147483602; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(620px, calc(100vw - 24px));
+    padding: 10px 12px 10px 12px; overflow: hidden;
+    border: 1px solid var(--csp-line); border-radius: 16px; background: var(--csp-surface); color: var(--csp-text);
+    box-shadow: var(--csp-shadow-pop); font: 13px/1.4 var(--csp-font);
+    animation: csp-done-in .32s cubic-bezier(.2, 1.3, .4, 1) both;
+}
+.csp-pick-done.is-leaving { animation: csp-done-out .18s ease forwards; }
+@keyframes csp-done-in { from { opacity: 0; transform: translate(-50%, -14px) scale(.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes csp-done-out { to { opacity: 0; transform: translate(-50%, -8px) scale(.98); } }
+.csp-pick-done-icon {
+    flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--csp-green); color: #fff; font-weight: 900; font-size: 18px;
+    animation: csp-done-icon .45s cubic-bezier(.2, 1.6, .4, 1) .08s both;
+}
+.csp-pick-done-icon path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: csp-done-check .35s ease .25s forwards; }
+.csp-pick-done.is-warn .csp-pick-done-icon { background: var(--csp-warn); }
+@keyframes csp-done-icon { from { transform: scale(.3); } to { transform: scale(1); } }
+@keyframes csp-done-check { to { stroke-dashoffset: 0; } }
+.csp-pick-done-text { display: grid; gap: 1px; min-width: 0; }
+.csp-pick-done-text b { font-size: 14px; font-weight: 800; }
+.csp-pick-done-text small { color: var(--csp-soft); font-size: 12px; }
+.csp-pick-done-actions { display: flex; gap: 6px; flex: none; margin-left: 4px; }
+.csp-pick-done-actions button {
+    all: unset; cursor: pointer; padding: 7px 12px; border-radius: 10px; font-size: 12.5px; font-weight: 700; white-space: nowrap;
+    background: var(--csp-elev-2); color: var(--csp-text);
+}
+.csp-pick-done-actions button:hover { background: var(--csp-elev-3); }
+.csp-pick-done-actions button.is-primary { background: var(--csp-accent); color: var(--csp-accent-ink); }
+.csp-pick-done-actions button.is-primary:hover { filter: brightness(1.08); }
+.csp-pick-done-actions button:focus-visible { outline: 2px solid var(--csp-accent); outline-offset: 2px; }
+.csp-pick-done-timer { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--csp-green); opacity: .7; transform-origin: left; animation: csp-done-timer 6s linear forwards; }
+.csp-pick-done.is-paused .csp-pick-done-timer { animation-play-state: paused; }
+@keyframes csp-done-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (max-width: 560px) {
+    .csp-pick-done { flex-wrap: wrap; }
+    .csp-pick-done-actions { width: 100%; justify-content: flex-end; }
+}
+
 .csp-footer-slot { display: inline-flex; align-items: center; gap: 4px; flex: none; margin-right: 4px; vertical-align: middle; }
 .csp-check-box.is-loose { border: 2px dashed #3b82f6; background: transparent; opacity: .7; }
 .csp-check-box.is-loose span { background: #6b8fc9; top: auto; bottom: -20px; border-radius: 0 6px 6px 6px; }
@@ -7886,6 +7952,7 @@ select.is-dd-open { border-color: var(--csp-accent-line) !important; box-shadow:
 .csp-action-toast > span { flex: 1 1 auto; min-width: 0; }
 .csp-action-toast button { all: unset; flex: none; white-space: nowrap; cursor: pointer; padding: 4px 10px; border-radius: 8px; background: var(--csp-accent); color: var(--csp-accent-ink); font-size: 12px; font-weight: 700; }
 .csp-action-toast button:last-child { background: transparent; color: var(--csp-soft); padding: 4px 6px; }
+.csp-action-toast button.is-secondary { background: var(--csp-elev-2); color: var(--csp-text); }
 
 /* 잔여량 · 채팅방 */
 .csp-quick-panel .csp-nai-balance-mini { padding: 2px 2px 0; background: transparent; box-shadow: none; }
@@ -8310,7 +8377,7 @@ body.csp-scene-hidden .csp-message-speed-btn { display: none !important; }
             all[provider] = { models, at: Date.now() };
             localStorage.setItem(MODEL_LIST_CACHE_KEY, JSON.stringify(all));
         } catch (err) {
-            console.warn('[Uni Scene Painter] 모델 목록 저장 실패:', err);
+            console.info('[Vignette] 모델 목록 저장 실패:', err);
         }
     }
 
@@ -8799,7 +8866,7 @@ Natural language → Danbooru tag examples:
             if (!sel || !el?.matches) return false;
             try { return el.matches(sel) || !!el.closest(sel); } catch (_) { return false; }
         };
-        const OURS = '.csp-generated-scene-image, .csp-image-history-row, .csp-inline-action-footer, .csp-quick-panel, .csp-overlay, .csp-fab, .csp-header-menu, .csp-check-layer, .csp-check-card, .csp-action-toast, .csp-dd-pop, #csp-toast';
+        const OURS = '.csp-generated-scene-image, .csp-image-history-row, .csp-inline-action-footer, .csp-quick-panel, .csp-overlay, .csp-fab, .csp-header-menu, .csp-check-layer, .csp-check-card, .csp-action-toast, .csp-dd-pop, #csp-toast, .csp-pick-done, .csp-pick-flash-layer';
         const isOurs = (el) => !!el?.closest?.(OURS);
         // a가 b보다 문서에서 앞에 있나 (서로 품지 않는 경우)
         const isBefore = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -9136,6 +9203,10 @@ Natural language → Danbooru tag examples:
             '.csp-message-generate-btn',
             '.csp-message-speed-btn',
             '.csp-dd-pop',
+            '.csp-pick-done',
+            '.csp-pick-flash-layer',
+            '.csp-check-layer',
+            '.csp-check-card',
             '#csp-toast'
         ].join(','));
     }
@@ -9951,7 +10022,7 @@ Natural language → Danbooru tag examples:
             }
             return archive;
         } catch (err) {
-            console.warn('[Uni Scene Painter] prompt archive read failed:', err);
+            console.info('[Vignette] prompt archive read failed:', err);
             return null;
         }
     }
@@ -10588,7 +10659,7 @@ Natural language → Danbooru tag examples:
                 const result = await searchDanbooruTagbook(query, 40);
                 rerollTagbookSearchResultEl.innerHTML = buildDanbooruSearchResultHtml(result, query);
             } catch (err) {
-                console.warn('[Uni Scene Painter] Reroll tagbook search failed:', err);
+                console.info('[Vignette] Reroll tagbook search failed:', err);
                 rerollTagbookSearchResultEl.innerHTML = `<div class="csp-mini-note">검색 실패: ${escapeHtml(err.message || err)}</div>`;
             } finally {
                 if (rerollTagbookSearchRunBtn) {
@@ -10746,7 +10817,7 @@ Natural language → Danbooru tag examples:
                 overlay.remove();
                 showToast('⚙️ 수정 설정으로 리롤 완료');
             } catch (err) {
-                console.warn('[Uni Scene Painter] image-specific reroll failed:', err);
+                console.info('[Vignette] image-specific reroll failed:', err);
                 showToast('⚠️ 리롤 실패: ' + err.message);
             } finally {
                 btn.disabled = false;
@@ -11055,7 +11126,7 @@ Natural language → Danbooru tag examples:
 
             return true;
         } catch (err) {
-            console.warn('[Uni Scene Painter] gallery single card preview update failed:', err);
+            console.info('[Vignette] gallery single card preview update failed:', err);
             // 이전 이미지가 이미 떠 있으면 화면을 비우지 않는다. 아예 이미지가 없을 때만 실패 문구 표시.
             if (!thumb.querySelector('img')) {
                 thumb.classList.add('is-missing');
@@ -11081,7 +11152,7 @@ Natural language → Danbooru tag examples:
             try {
                 await deleteStoredImage(removed.imageId);
             } catch (err) {
-                console.warn('[Uni Scene Painter] gallery history image delete failed:', err);
+                console.info('[Vignette] gallery history image delete failed:', err);
             }
         }
 
@@ -11273,7 +11344,7 @@ Natural language → Danbooru tag examples:
                     return;
                 }
             } catch (err) {
-                console.warn('[Uni Scene Painter] gallery action failed:', err);
+                console.info('[Vignette] gallery action failed:', err);
                 showToast('⚠️ 갤러리 작업 실패: ' + err.message);
             }
         });
@@ -12108,7 +12179,7 @@ Natural language → Danbooru tag examples:
                 });
                 delete migrated.exactTagIndex;
                 putDanbooruTagbookCache(migrated).catch(err => {
-                    console.debug?.('[Uni Scene Painter] Danbooru lite-minimal cache migration skipped:', err?.message || err);
+                    console.debug?.('[Vignette] Danbooru lite-minimal cache migration skipped:', err?.message || err);
                 });
             }
 
@@ -12398,7 +12469,7 @@ Natural language → Danbooru tag examples:
                 try {
                     request?.abort?.();
                 } catch (_) {}
-                console.warn('[Uni Scene Painter] GM request cancelled by user:', { method, url });
+                console.info('[Vignette] GM request cancelled by user:', { method, url });
                 finishReject(new Error('작업이 취소됐어요.'));
             };
 
@@ -12424,17 +12495,17 @@ Natural language → Danbooru tag examples:
                             // API가 거절한 건 확장의 오류가 아니라서 warn으로 남긴다.
                             // (error로 남기면 chrome://extensions 의 "오류" 목록에 쌓인다)
                             // 주소에 붙은 키(?key=)는 지운다.
-                            console.warn(`[Vignette] API 요청 실패 ${response.status} ${method} ${redactUrlForLog(url)}`);
+                            console.info(`[Vignette] API 요청 실패 ${response.status} ${method} ${redactUrlForLog(url)}`);
                             // 에러 원인 파악을 위해 응답 본문 전체를 별도 로그로 출력
                             // retry_after_seconds가 있으면 에러 객체에 실어서 withRetry가 활용
                             let retryAfterSec = null;
                             try {
                                 const errBody = JSON.parse(response.responseText);
-                                console.warn('[Vignette] API 응답:', JSON.stringify(errBody).slice(0, 600));
+                                console.info('[Vignette] API 응답:', JSON.stringify(errBody).slice(0, 600));
                                 const ra = errBody?.error?.metadata?.retry_after_seconds;
                                 if (ra && Number.isFinite(Number(ra))) retryAfterSec = Math.ceil(Number(ra));
                             } catch (_) {
-                                console.warn('[Vignette] API 응답 원문:', String(response.responseText || '').slice(0, 600));
+                                console.info('[Vignette] API 응답 원문:', String(response.responseText || '').slice(0, 600));
                             }
 
                             const httpErr = new Error(message);
@@ -12459,27 +12530,27 @@ Natural language → Danbooru tag examples:
 
                         finishResolve(JSON.parse(response.responseText));
                     } catch (e) {
-                        console.warn('[Uni Scene Painter] GM response parse failed:', { method, url, response, error: e });
+                        console.info('[Vignette] GM response parse failed:', { method, url, response, error: e });
                         finishReject(e);
                     }
                 },
                 onerror: (error) => {
                     if (settled) return;
-                    console.warn(`[Vignette] 네트워크 오류 ${method} ${redactUrlForLog(url)}`, error?.statusText || error?.error || '');
+                    console.info(`[Vignette] 네트워크 오류 ${method} ${redactUrlForLog(url)}`, error?.statusText || error?.error || '');
                     const netErr = new Error('🌐 네트워크 오류: 인터넷 연결이나 API 주소를 확인해줘.');
                     netErr.isNetworkError = true;
                     finishReject(netErr);
                 },
                 ontimeout: () => {
                     if (settled) return;
-                    console.warn(`[Vignette] 요청 시간 초과 ${method} ${redactUrlForLog(url)}`);
+                    console.info(`[Vignette] 요청 시간 초과 ${method} ${redactUrlForLog(url)}`);
                     const toErr = new Error('⏱️ 타임아웃: 응답이 너무 오래 걸렸어. 다시 시도해봐.');
                     toErr.httpStatus = 408;
                     finishReject(toErr);
                 },
                 onabort: () => {
                     if (settled) return;
-                    console.log('[Uni Scene Painter] 생성 취소됨:', { method, url });
+                    console.log('[Vignette] 생성 취소됨:', { method, url });
                     finishReject(new Error('작업이 취소됐어요.'));
                 }
             });
@@ -13768,7 +13839,7 @@ ${String(additionalRequest || '').trim()}
         // 예전처럼 첫 번째 슬롯을 찍으면 엉뚱한 캐릭터가 조용히 그려진다.
         // 인물 없이 배경·구도·분위기만으로 생성하는 편이 낫다.
         if (!visible.length && roomCharacters.length > 1) {
-            console.warn('[Uni Scene Painter] 장면 주체를 특정하지 못했어요. 인물 없이 장면만 생성합니다.');
+            console.info('[Vignette] 장면 주체를 특정하지 못했어요. 인물 없이 장면만 생성합니다.');
         }
 
         // 현재 안정형은 한 장면의 중심 캐릭터 1명만 사용합니다.
@@ -13828,7 +13899,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         } else {
             // 객체 하나만 왔을 때: sceneCount > 1이면 경고 후 1개만
             if (sceneCount > 1) {
-                console.warn('[Uni Scene Painter] 다중 장면 요청했는데 AI가 객체 1개만 반환했어요. 1장면만 생성해요.');
+                console.info('[Vignette] 다중 장면 요청했는데 AI가 객체 1개만 반환했어요. 1장면만 생성해요.');
             }
             rawPlans = [rawParsed && typeof rawParsed === 'object' ? rawParsed : {}];
         }
@@ -13906,7 +13977,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
 
         const missing = segments.map((range, i) => (result[i] ? -1 : i)).filter(i => i >= 0);
         if (missing.length) {
-            console.warn(`[Uni Scene Painter] 다중 장면 ${count}개 중 ${missing.length}개가 비어서 개별 분석으로 채울게.`);
+            console.info(`[Vignette] 다중 장면 ${count}개 중 ${missing.length}개가 비어서 개별 분석으로 채울게.`);
             const usedPlans = result.filter(Boolean).map(item => ({
                 sceneTitle: item.plan.sceneTitle, mood: item.plan.mood,
                 interactionPrompt: item.plan.interactionPrompt, insertAfterParagraph: item.plan.insertAfterParagraph
@@ -14233,7 +14304,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                     }
                 }
             } catch (zipErr) {
-                console.warn('[Uni Scene Painter] unzip failed, trying raw image fallback', zipErr);
+                console.info('[Vignette] unzip failed, trying raw image fallback', zipErr);
                 if (!extractedBlob && zipErr instanceof Error && zipErr.message) throw zipErr;
             }
         } else if (signature === 'png') {
@@ -14310,7 +14381,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 currentHistoryItem.folderFileName = await saveImageToChosenFolder(imageUrl, plan);
                 syncCurrentImageFieldsFromHistory(record);
             } catch (folderErr) {
-                console.warn('[Uni Scene Painter] auto folder save failed:', folderErr);
+                console.info('[Vignette] auto folder save failed:', folderErr);
             }
         }
 
@@ -14348,7 +14419,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 historyItem.folderFileName = await saveImageToChosenFolder(imageUrl, target.plan || {});
                 syncCurrentImageFieldsFromHistory(target);
             } catch (folderErr) {
-                console.warn('[Uni Scene Painter] auto folder save failed:', folderErr);
+                console.info('[Vignette] auto folder save failed:', folderErr);
             }
         }
 
@@ -14457,7 +14528,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 a.remove();
                 showToast('⬇️ 다운로드를 시작했어요.');
             } catch (err) {
-                console.warn('[Uni Scene Painter] download failed:', err);
+                console.info('[Vignette] download failed:', err);
                 showToast('⚠️ 다운로드 실패: ' + err.message);
             }
             return;
@@ -14474,7 +14545,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 const filename = await saveImageToChosenFolder(src, record?.plan || {});
                 showToast(`📁 폴더 저장 완료: ${filename}`);
             } catch (err) {
-                console.warn('[Uni Scene Painter] folder save failed:', err);
+                console.info('[Vignette] folder save failed:', err);
                 showToast('⚠️ 폴더 저장 실패: ' + err.message);
             }
             return;
@@ -14587,7 +14658,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                         currentHistoryItem.folderFileName = await saveImageToChosenFolder(nextImageUrl, record.plan || {});
                         syncCurrentImageFieldsFromHistory(record);
                     } catch (folderErr) {
-                        console.warn('[Uni Scene Painter] auto folder save failed:', folderErr);
+                        console.info('[Vignette] auto folder save failed:', folderErr);
                     }
                 }
 
@@ -14598,7 +14669,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 setTimeout(() => hideTaskHud(), 400);
                 showToast('🔄 리롤 완료');
             } catch (err) {
-                console.warn('[Uni Scene Painter] reroll failed:', err);
+                console.info('[Vignette] reroll failed:', err);
                 hideTaskHud(true);
                 if (!String(err?.message || '').includes('aborted')) showToast('⚠️ 리롤 실패: ' + err.message);
             } finally {
@@ -15713,7 +15784,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 showToast('✅ 선택 문단 기준 재분석 완료');
                 setTimeout(() => hideTaskHud(), 420);
             } catch (err) {
-                console.warn('[Uni Scene Painter] paragraph reanalysis failed:', err);
+                console.info('[Vignette] paragraph reanalysis failed:', err);
                 updateTaskHud({ title: '재분석 실패', message: '선택 문단 기준 재분석에 실패했어.\n\n사유: ' + err.message, progress: 100, status: 'error' });
                 showToast('⚠️ 재분석 실패: ' + err.message);
                 setTimeout(() => hideTaskHud(), 1800);
@@ -15775,7 +15846,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 showToast('✅ 추가 요청 반영 완료');
                 setTimeout(() => hideTaskHud(), 420);
             } catch (err) {
-                console.warn('[Uni Scene Painter] scene refine request failed:', err);
+                console.info('[Vignette] scene refine request failed:', err);
                 updateTaskHud({ title: '장면 수정 실패', message: '추가 요청 반영에 실패했어.\n\n사유: ' + err.message, progress: 100, status: 'error' });
                 showToast('⚠️ 재분석 요청 실패: ' + err.message);
                 setTimeout(() => hideTaskHud(), 1800);
@@ -15892,7 +15963,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 });
                 _closeModal('done');
             } catch (err) {
-                console.warn('[Uni Scene Painter] NAI generation failed:', err);
+                console.info('[Vignette] NAI generation failed:', err);
                 showToast('⚠️ NAI 생성 실패: ' + err.message);
             } finally {
                 btn.disabled = false;
@@ -16064,7 +16135,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
             setTimeout(() => hideTaskHud(), 420);
             markSceneButtons(messageKey, true);
         } catch (err) {
-            console.warn('[Uni Scene Painter] speed mode failed:', err);
+            console.info('[Vignette] speed mode failed:', err);
             showToast('⚠️ 생성 실패: ' + err.message);
             hideTaskHud(true);
         } finally {
@@ -16144,7 +16215,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 try {
                     await reapplySavedScene(markdown);
                 } catch (err) {
-                    console.warn('[Uni Scene Painter] scene restore failed:', err);
+                    console.info('[Vignette] scene restore failed:', err);
                 }
                 // 여러 장 복원 시 한 프레임씩 분산해 React/Virtuoso 초기 렌더와 충돌을 줄인다.
                 await new Promise(resolve => requestAnimationFrame(resolve));
@@ -16292,7 +16363,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 return;
             }
 
-            console.log('[Uni Scene Painter] image button clicked:', { key, markdown });
+            console.log('[Vignette] image button clicked:', { key, markdown });
             btn.setAttribute('data-csp-loading', 'true');
             btn.disabled = true;
             const _providerName = getProviderDisplayName(getGlobalSettings());
@@ -16347,7 +16418,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
 
                 showToast(`✅ ${_sceneCount}개 장면 분석/생성 완료`);
             } catch (err) {
-                console.warn('[Uni Scene Painter] AI 분석 실패:', err);
+                console.info('[Vignette] AI 분석 실패:', err);
                 showToast('⚠️ 분석 실패: ' + err.message);
                 hideTaskHud(true);
             } finally {
@@ -18704,7 +18775,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 refreshHeaderTools();
                 scheduleInject();
             } catch (err) {
-                console.warn('[Uni Scene Painter] settings save failed:', err);
+                console.info('[Vignette] settings save failed:', err);
                 showToast('⚠️ 설정 저장 실패: ' + (err.message || err));
                 refreshStorageStatus();
             }
@@ -18823,9 +18894,14 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         if (painterBtn) {
             painterBtn.classList.toggle('is-off', !on);
             painterBtn.classList.toggle('is-active', _quickPanelVisible);
-            painterBtn.title = on ? 'Vignette — 켜짐' : 'Vignette — 꺼짐';
+            // 본문 위치를 아직 안 정했으면 버튼에 빨간 ✕ (어디부터 해야 하는지 보이게)
+            const needsSetup = !isUniversMode() && !CSP_EXT.platform?.bodySelector;
+            painterBtn.classList.toggle('needs-setup', needsSetup);
+            painterBtn.title = needsSetup ? 'Vignette — 본문 위치를 먼저 지정해 줘' : (on ? 'Vignette — 켜짐' : 'Vignette — 꺼짐');
         }
     }
+    // 위치를 저장하거나 지우면 버튼 표시도 바로 맞춘다
+    CSP_EXT.onChange((what) => { if (what === 'site') refreshHeaderTools(); });
 
     // ── 확장: 플로팅 버튼 ─────────────────────────────────────
     // 사이트마다 헤더 구조가 달라서 헤더에 끼우지 않고 화면에 떠 있는 버튼 하나를 둔다.
@@ -18939,7 +19015,8 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 hasFooter: !!p.footerSelector || isUniversMode(),
                 hasUser: !!p.userSelector,
                 isUnivers: p.id === 'univers',
-                uiMode: CSP_EXT.uiMode
+                uiMode: CSP_EXT.uiMode,
+                naiKeyReady: !!String(peekGlobalSettings()?.naiApiKey || '').trim()
             };
         }
         if (action === 'toggle-enabled') { setScenePainterEnabled(!!payload.value); return true; }
@@ -18971,11 +19048,17 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
     async function runSitePicker(kind) {
         closeHeaderPainterMenu();
         closeSiteCheck();   // 위치 확인 카드가 열려 있으면 고를 때 가리지 않게 닫는다
+        closePickFeedback();
         const fab = document.getElementById('csp-header-tools');
         if (fab) fab.style.visibility = 'hidden';
+        // 퀵 패널이 떠 있었으면 고르는 동안만 숨겼다가 되돌린다 (예전엔 숨긴 채로 남았다)
+        const qpWasShown = !!(_quickPanelEl?.isConnected && _quickPanelEl.style.display !== 'none');
         hideQuickPanel();
         let result = null;
-        try { result = await CSP_EXT.pick(kind); } finally { if (fab) fab.style.visibility = ''; }
+        try { result = await CSP_EXT.pick(kind); } finally {
+            if (fab) fab.style.visibility = '';
+            if (qpWasShown && _quickPanelEl?.isConnected) _quickPanelEl.style.display = '';
+        }
         if (!result) { showToast('위치 지정을 취소했어.'); return; }
         const key = kind === 'footer' ? 'footerSelector' : kind === 'user' ? 'userSelector' : 'bodySelector';
         const patch = { [key]: result.selector };
@@ -18990,12 +19073,123 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         }
         await CSP_EXT.saveSiteConfig(patch);
         GEN.invalidate();
-        const label = kind === 'footer' ? '하단' : kind === 'user' ? '내 메시지' : '본문';
-        showToast(`✅ ${label} 위치 저장 — 화면에서 ${result.count}곳 찾았어.`);
         document.querySelectorAll('.csp-message-generate-btn, .csp-message-speed-btn, .csp-inline-action-footer').forEach(el => el.remove());
         scheduleInject();
-        // 잘 잡혔는지 바로 보여 준다
-        setTimeout(() => showSiteCheck({ afterPick: true }), 500);
+        // 버튼이 다시 붙은 뒤에 "저장됨" 반응을 보여 준다
+        setTimeout(() => showPickFeedback(kind), 380);
+    }
+
+    // ── 위치 저장 직후 반응 ─────────────────────────────────────
+    // ① 잡힌 칸들이 한 번 "톡" 튀어 오르며 빛났다가 1.6초 뒤 스르륵 사라진다 (스크롤해도 따라감)
+    // ② 위쪽에 "✓ 저장됨" 띠: 몇 곳에 붙었는지 + 다음에 할 일 버튼
+    //    문제가 없으면 6초 뒤 저절로 닫히고(남은 시간 막대가 줄어든다), 마우스를 올리면 기다린다.
+    //    문제가 있으면 노란 띠로 바뀌고 저절로 닫히지 않는다 → [자세히 보기]로 위치 확인 카드.
+    let _pickFeedback = null;
+
+    function closePickFeedback() {
+        if (!_pickFeedback) return;
+        _pickFeedback.cleanup();
+        _pickFeedback = null;
+    }
+
+    function showPickFeedback(kind) {
+        closePickFeedback();
+        closeSiteCheck();
+        GEN.invalidate();
+        const p = CSP_EXT.platform || {};
+        const s = GEN.scan();
+        const aiBodies = s.bodies.filter(b => !GEN.isUserBody(b));
+        let targets = [];
+        if (kind === 'footer') targets = aiBodies.map(b => s.footerOfBody.get(b)).filter(Boolean);
+        else if (kind === 'user') { try { targets = Array.from(document.querySelectorAll(p.userSelector)); } catch (_) {} }
+        else targets = aiBodies;
+
+        const report = checkSiteDom();
+        const problem = report.issues.find(i => i.level === 'error') || report.issues.find(i => i.level === 'warn');
+        const label = kind === 'footer' ? '하단 위치' : kind === 'user' ? '내 메시지 제외' : '본문 위치';
+        const detail = kind === 'footer'
+            ? `AI 답변 ${aiBodies.length}개 중 ${targets.length}개에 하단 줄을 찾았어${targets.length < aiBodies.length ? ` · 나머지 ${aiBodies.length - targets.length}개는 본문 아래에 자동 줄` : ''}`
+            : kind === 'user'
+                ? `내 메시지 ${targets.length}개를 삽화 대상에서 뺐어`
+                : `AI 답변 ${aiBodies.length}개를 찾아서 삽화 버튼을 붙였어`;
+
+        // ① 잡힌 칸 반짝임
+        const layer = document.createElement('div');
+        layer.className = 'csp-pick-flash-layer';
+        const boxes = targets.slice(0, 80).map((el, i) => {
+            const box = document.createElement('div');
+            box.className = `csp-pick-flash is-${kind}`;
+            box.style.animationDelay = `${Math.min(i, 12) * 40}ms`;
+            layer.appendChild(box);
+            return { el, box };
+        });
+        document.body.appendChild(layer);
+        const place = () => boxes.forEach(({ el, box }) => {
+            const r = el.getBoundingClientRect();
+            const off = !el.isConnected || r.bottom < 0 || r.top > innerHeight || !r.width;
+            box.style.display = off ? 'none' : 'block';
+            if (!off) Object.assign(box.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+        });
+        let raf = 0;
+        const onScroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(place); };
+        window.addEventListener('scroll', onScroll, true);
+        place();
+        const layerTimer = setTimeout(() => { layer.remove(); window.removeEventListener('scroll', onScroll, true); }, 2300);
+
+        // ② 저장됨 띠
+        const ok = !problem;
+        const bar = document.createElement('div');
+        bar.className = `csp-pick-done csp-themed ${ok ? 'is-ok' : 'is-warn'}`;
+        const actions = [];
+        if (!ok) actions.push(['detail', '자세히 보기', true]);
+        if (ok && kind === 'body' && !p.footerSelector) actions.push(['next-footer', '하단 위치도 지정', true]);
+        if (ok && kind !== 'user') actions.push(['check', '위치 확인', !actions.length]);
+        actions.push(['done', ok ? '완료' : '그대로 두기', false]);
+        bar.innerHTML = `
+            <span class="csp-pick-done-icon" aria-hidden="true">${ok
+                ? '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+                : '!'}</span>
+            <span class="csp-pick-done-text"><b>${escapeHtml(label)} ${ok ? '저장됨' : '저장됨 · 확인 필요'}</b><small>${escapeHtml(ok ? detail : problem.title)}</small></span>
+            <span class="csp-pick-done-actions">${actions.map(([act, text, primary]) => `<button type="button" data-act="${act}" class="${primary ? 'is-primary' : ''}">${escapeHtml(text)}</button>`).join('')}</span>
+            ${ok ? '<i class="csp-pick-done-timer"></i>' : ''}`;
+        document.body.appendChild(bar);
+        applyCspTheme(bar);
+
+        let autoTimer = 0;
+        const arm = () => {
+            clearTimeout(autoTimer);
+            if (!ok) return;
+            const t = bar.querySelector('.csp-pick-done-timer');
+            if (t) { t.style.animation = 'none'; void t.offsetWidth; t.style.animation = ''; }
+            autoTimer = setTimeout(() => { if (bar.matches(':hover')) arm(); else closePickFeedback(); }, 6000);
+        };
+        bar.addEventListener('mouseenter', () => bar.classList.add('is-paused'));
+        bar.addEventListener('mouseleave', () => { bar.classList.remove('is-paused'); arm(); });
+        arm();
+
+        bar.addEventListener('click', (e) => {
+            const act = e.target.closest('button')?.dataset.act;
+            if (!act) return;
+            closePickFeedback();
+            if (act === 'next-footer') runSitePicker('footer');
+            else if (act === 'check') showSiteCheck();
+            else if (act === 'detail') showSiteCheck();
+        });
+        const onKey = (e) => { if (e.key === 'Escape') closePickFeedback(); };
+        document.addEventListener('keydown', onKey, true);
+
+        _pickFeedback = {
+            cleanup() {
+                clearTimeout(autoTimer);
+                clearTimeout(layerTimer);
+                cancelAnimationFrame(raf);
+                window.removeEventListener('scroll', onScroll, true);
+                document.removeEventListener('keydown', onKey, true);
+                layer.remove();
+                bar.classList.add('is-leaving');
+                setTimeout(() => bar.remove(), 180);
+            }
+        };
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -19550,12 +19744,12 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 if (isAutoRepairOn()) tidyDomState();
                 maybeAutoRepair();
             }
-        } catch (err) { console.warn('[Scene Painter] dom watch', err); }
+        } catch (err) { console.info('[Vignette] dom watch', err); }
         setTimeout(domWatch, 5000);
     }, 7000);
 
     // 토스트 + 버튼 하나
-    function showCspActionToast(message, actionLabel, onAction) {
+    function showCspActionToast(message, actionLabel, onAction, doneMessage = '↩ 되돌렸어.', extra = null) {
         document.getElementById('csp-action-toast')?.remove();
         const t = document.createElement('div');
         t.id = 'csp-action-toast';
@@ -19564,9 +19758,30 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         document.body.appendChild(t);
         applyCspTheme(t);
         const [act, close] = t.querySelectorAll('button');
-        act.onclick = async () => { t.remove(); await onAction(); showToast('↩ 되돌렸어.'); };
+        act.onclick = async () => { t.remove(); await onAction(); if (doneMessage) showToast(doneMessage); };
         close.onclick = () => t.remove();
+        // 버튼 하나 더 (선택)
+        if (extra) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = extra.label;
+            b.className = 'is-secondary';
+            b.onclick = () => { t.remove(); extra.run(); };
+            act.after(b);
+        }
         setTimeout(() => t.remove(), 12000);
+    }
+
+    // API 키가 비어서 실패한 경우: 원인 문구 + 바로 고칠 수 있는 버튼
+    // 키는 한 번 넣으면 모든 사이트 · 모든 채팅에서 같이 쓴다는 것도 알려 준다.
+    const MISSING_KEY_RE = /(API\s*Key|API\s*키|Token|토큰|Access Token).{0,24}(비어|없어|필요)/i;
+    function isMissingKeyMessage(text) {
+        return MISSING_KEY_RE.test(String(text || ''));
+    }
+    function showMissingKeyHelp(message) {
+        const clean = String(message || '').replace(/^[⚠️❌🔑\s]*(생성 실패:|분석 실패:)?\s*/u, '');
+        showCspActionToast(`🔑 ${clean} 키는 한 번만 넣으면 모든 사이트에서 같이 써요.`, '설정 열기', () => openSettingsModal(), '',
+            { label: '관리 페이지에서 입력', run: () => CSP_EXT.openManager('keys').catch(() => {}) });
     }
 
     // ── 위치 확인 화면 ──────────────────────────────────────────
@@ -19809,7 +20024,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 if (rec?.id) await CSP_EXT.putMeta(rec.id, rec.value);
             }
         } catch (err) {
-            console.warn('[Scene Painter] legacy image import failed', err);
+            console.info('[Vignette] legacy image import failed', err);
         }
         CSP_EXT.flush();
         showToast(`✅ 가져오기 완료 — 설정 ${copied}개 · 이미지 ${images}장. 새로고침하면 반영돼.`);
@@ -19868,9 +20083,9 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 <span class="csp-hm-site-name">${escapeHtml(CSP_EXT.platformName)}</span>
                 <span class="csp-hm-site-state ${domState.ok ? 'is-ok' : 'is-warn'}">${escapeHtml(domState.text)}</span>
             </div>
-            <button type="button" class="csp-hm-item" data-act="pick-body">${cspIcon('crosshair', 16)}<span>본문 위치 지정</span>${siteCfg.bodySelector || isUniversMode() ? '<em class="csp-hm-count">✓</em>' : ''}</button>
-            <button type="button" class="csp-hm-item" data-act="pick-footer">${cspIcon('footer', 16)}<span>하단 위치 지정</span>${siteCfg.footerSelector || isUniversMode() ? '<em class="csp-hm-count">✓</em>' : '<em class="csp-hm-count">자동</em>'}</button>
-            <button type="button" class="csp-hm-item" data-act="pick-user">${cspIcon('userx', 16)}<span>내 메시지 제외 지정</span>${siteCfg.userSelector ? '<em class="csp-hm-count">✓</em>' : '<em class="csp-hm-count">선택</em>'}</button>
+            <button type="button" class="csp-hm-item" data-act="pick-body">${cspIcon('crosshair', 16)}<span>본문 위치 지정</span>${siteCfg.bodySelector || isUniversMode() ? '<em class="csp-hm-count is-set">✓</em>' : '<em class="csp-hm-count is-unset" title="아직 지정 안 됨">✕</em>'}</button>
+            <button type="button" class="csp-hm-item" data-act="pick-footer">${cspIcon('footer', 16)}<span>하단 위치 지정</span>${siteCfg.footerSelector || isUniversMode() ? '<em class="csp-hm-count is-set">✓</em>' : '<em class="csp-hm-count is-unset" title="아직 지정 안 됨 — 지금은 본문 아래 자동 줄">✕</em>'}</button>
+            <button type="button" class="csp-hm-item" data-act="pick-user">${cspIcon('userx', 16)}<span>내 메시지 제외 지정</span>${siteCfg.userSelector ? '<em class="csp-hm-count is-set">✓</em>' : '<em class="csp-hm-count is-unset" title="아직 지정 안 됨 (필요할 때만)">✕</em>'}</button>
             <button type="button" class="csp-hm-item" data-act="check">${cspIcon('check', 16)}<span>위치 확인 · 자동 진단</span></button>
             <button type="button" class="csp-hm-item" data-act="reset-site">${cspIcon('refresh', 16)}<span>위치 초기화</span></button>
             ${CSP_EXT.platform?.id === 'univers' ? `<button type="button" class="csp-hm-item" data-act="import-legacy">${cspIcon('download', 16)}<span>유저스크립트 기록 가져오기</span></button>` : ''}

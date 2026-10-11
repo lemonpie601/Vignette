@@ -122,7 +122,7 @@ select.dd-native { position: absolute !important; width: 1px !important; height:
   ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--accent) 70%, transparent); }
 }
 
-input[type="text"], input[type="search"], textarea, select {
+input[type="text"], input[type="search"], input[type="password"], input[type="url"], input[type="email"], input[type="number"], textarea, select {
   width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 9px;
   background: var(--surface); color: var(--text); font: 13px/1.4 var(--font);
 }

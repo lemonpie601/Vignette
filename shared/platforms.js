@@ -86,11 +86,25 @@
     }
 
     // 채팅방이면 ID, 아니면 ''.
+    // 코어가 아주 자주 부른다(저장 키를 만들 때마다). 같은 주소 · 같은 규칙이면 지난 결과를 쓴다.
+    const regexCache = new Map();
+    let lastChatIdKey = '';
+    let lastChatId = '';
     function extractChatId(platform, loc) {
         const pathname = loc.pathname || '/';
+        const memoKey = `${platform?.id || ''}|${platform?.chatPath || ''}|${pathname}`;
+        if (memoKey === lastChatIdKey) return lastChatId;
+        lastChatIdKey = memoKey;
+        lastChatId = computeChatId(platform, pathname);
+        return lastChatId;
+    }
+
+    function computeChatId(platform, pathname) {
         if (platform?.chatPath) {
             try {
-                const m = pathname.match(new RegExp(platform.chatPath));
+                let re = regexCache.get(platform.chatPath);
+                if (!re) { re = new RegExp(platform.chatPath); regexCache.set(platform.chatPath, re); }
+                const m = pathname.match(re);
                 return m ? sanitizeId(m[1] || m[0]) : '';
             } catch (_) { /* 잘못된 정규식이면 아래 기본 규칙 */ }
         }

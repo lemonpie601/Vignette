@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Vignette",
   "short_name": "Vignette",
-  "version": "7.0.0",
+  "version": "0.9.0",
   "description": "AI 캐릭터 채팅 답변에 NovelAI 삽화를 그려 넣어요. 여러 플랫폼 지원 · 플랫폼별/채팅별 보관 · 관리 페이지.",
   "icons": {
     "16": "icons/icon16.png",

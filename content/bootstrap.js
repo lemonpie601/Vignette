@@ -69,12 +69,18 @@
     };
 
     // Object.keys(localStorage) 를 그대로 쓰는 코드가 많아서 Proxy로 흉내 낸다.
+    // 메서드는 한 번만 묶어 둔다 (예전엔 localStorage.getItem 을 부를 때마다 bind로 새 함수를 만들었다)
+    const boundApi = {
+        getItem: storageApi.getItem.bind(storageApi),
+        setItem: storageApi.setItem.bind(storageApi),
+        removeItem: storageApi.removeItem.bind(storageApi),
+        clear: storageApi.clear.bind(storageApi),
+        key: storageApi.key.bind(storageApi)
+    };
     const lsShim = new Proxy({}, {
         get(_, prop) {
-            if (prop in storageApi) {
-                const v = storageApi[prop];
-                return typeof v === 'function' ? v.bind(storageApi) : v;
-            }
+            if (prop in boundApi) return boundApi[prop];
+            if (prop === 'length') return cache.size;
             if (typeof prop === 'string' && cache.has(prop)) return cache.get(prop);
             return undefined;
         },
@@ -106,9 +112,14 @@
         return P.extractChatId(platform, location);
     }
 
+    let _roomKeyMemo = { pid: null, chatId: null, key: 'global_room' };
     function getRoomKey() {
         const chatId = getChatId();
-        return chatId ? P.makeRoomKey(platform.id, chatId) : 'global_room';
+        if (!chatId) return 'global_room';
+        if (_roomKeyMemo.pid !== platform.id || _roomKeyMemo.chatId !== chatId) {
+            _roomKeyMemo = { pid: platform.id, chatId, key: P.makeRoomKey(platform.id, chatId) };
+        }
+        return _roomKeyMemo.key;
     }
 
     async function saveSiteConfig(patch) {
@@ -145,6 +156,9 @@
             if (!chats[roomKey] && !create) return;
             const prev = chats[roomKey] || {};
             const title = (document.title || '').trim().slice(0, 120);
+            // 이미 있는 항목이고 1분 안에 갱신했고 제목도 그대로면 쓰지 않는다
+            // (설정을 저장할 때마다 색인을 다시 쓰면 열려 있는 관리 페이지까지 매번 깨운다)
+            if (chats[roomKey] && !extra.lastImageAt && Date.now() - (prev.lastVisited || 0) < 60000 && (prev.customTitle || prev.title === title)) return;
             chats[roomKey] = {
                 ...prev,
                 roomKey,
@@ -186,6 +200,8 @@
 
     // ── GM_xmlhttpRequest ─────────────────────────────────────
     function base64ToArrayBuffer(b64) {
+        // 최신 크롬은 내장 변환이 훨씬 빠르다 (수 MB 이미지 응답)
+        if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(b64 || '').buffer;
         const bin = atob(b64 || '');
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);

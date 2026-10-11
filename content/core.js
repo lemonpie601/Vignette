@@ -1179,6 +1179,12 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
                 if (silent) return null;
                 throw new Error('커스텀 API 모델 이름이 비어 있어요.');
             }
+            // 키가 비어 있으면 인증 헤더 없이 나가서 중계 서버가 "Invalid token"만 돌려준다.
+            // 키가 필요 없는 서버(로컬 등)는 인증 방식을 '인증 없음'으로 두면 된다.
+            if (!String(global?.customApiKey || '').trim() && String(global?.customAuthMode || 'bearer') !== 'none') {
+                if (silent) return null;
+                throw new Error('커스텀 API 키가 비어 있어요. 설정 › API에서 키를 넣어줘. (확장은 유저스크립트와 저장소가 따로라 키를 다시 넣어야 해. 키가 필요 없는 서버면 인증 방식을 "인증 없음"으로.)');
+            }
             return { provider: 'custom', model: customModel,
                      apiKey: String(global?.customApiKey || '').trim(),
                      authHeaders: buildCustomAuthHeaders(global),
@@ -3780,7 +3786,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
         try {
             setLocalJsonStorage(GLOBAL_SETTINGS_KEY, normalizeGlobalSettings(settings));
         } catch (err) {
-            console.error('[Uni Scene Painter] global settings save failed:', err);
+            console.warn('[Uni Scene Painter] global settings save failed:', err);
             if (isQuotaExceededError(err)) {
                 throw new Error('전역 설정 저장 실패: 브라우저 저장공간(localStorage)이 가득 찼어요. 삽화 기록을 정리하거나 저장소 관리에서 압축을 실행해줘.');
             }
@@ -3817,7 +3823,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
         try {
             setLocalJsonStorage(getRoomSettingsKey(), normalizeRoomSettings(settings));
         } catch (err) {
-            console.error('[Uni Scene Painter] room settings save failed:', err);
+            console.warn('[Uni Scene Painter] room settings save failed:', err);
             if (isQuotaExceededError(err)) {
                 throw new Error('캐릭터 슬롯 저장 실패: 브라우저 저장공간(localStorage)이 가득 찼어요. 긴 태그/퀵슬롯/삽화 기록을 정리해줘.');
             }
@@ -4015,7 +4021,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
                     break;
                 } catch (retryErr) {
                     if (keepCount === 0 || !isQuotaExceededError(retryErr)) {
-                        console.error('[Uni Scene Painter] scene records save retry failed:', retryErr);
+                        console.warn('[Uni Scene Painter] scene records save retry failed:', retryErr);
                     }
                 }
             }
@@ -5570,13 +5576,22 @@ ${getCompactNsfwSceneAnalysisGuide()}
         return CSP_EXT_THEMES.includes(v) ? v : 'warm';
     }
 
+    // 바뀔 때만 class를 건드린다. 같은 값을 다시 써도 DOM 변경으로 잡혀서
+    // 채팅 화면 감시(MutationObserver)를 쓸데없이 깨웠다.
     function applyCspTheme(el) {
         if (!el || !el.classList) return;
         const theme = getExtThemeName();
-        CSP_EXT_THEMES.forEach(name => el.classList.toggle(`csp-ext-${name}`, name === theme));
-        el.classList.add('csp-themed');
+        for (const name of CSP_EXT_THEMES) {
+            const want = name === theme;
+            if (el.classList.contains(`csp-ext-${name}`) !== want) el.classList.toggle(`csp-ext-${name}`, want);
+        }
+        if (!el.classList.contains('csp-themed')) el.classList.add('csp-themed');
     }
-    function syncCspThemeAll() {
+    let _lastSyncedTheme = '';
+    function syncCspThemeAll(force = false) {
+        const theme = getExtThemeName();
+        if (!force && theme === _lastSyncedTheme) return;
+        _lastSyncedTheme = theme;
         document.querySelectorAll(CSP_THEMED_ROOT_SELECTOR).forEach(applyCspTheme);
     }
 
@@ -5598,11 +5613,10 @@ ${getCompactNsfwSceneAnalysisGuide()}
             console.warn('[Uni Scene Painter] theme observer failed', err);
         }
 
-        // 사용자가 뷰어 테마를 바꾸면 열려 있는 CSP UI도 따라가게
-        setInterval(() => {
-            if (!document.querySelector(CSP_THEMED_ROOT_SELECTOR)) return;
-            syncCspThemeAll();
-        }, 1500);
+        // 관리 페이지에서 테마를 바꾸거나 시스템 다크 모드가 바뀌면 열려 있는 UI도 따라가게.
+        // 테마 이름이 바뀌었을 때만 화면을 건드린다.
+        cspDarkQuery?.addEventListener?.('change', () => syncCspThemeAll(true));
+        setInterval(() => syncCspThemeAll(), 3000);
     }
 
     // ── 커스텀 드롭다운 ──────────────────────────────────────────
@@ -8767,6 +8781,10 @@ Natural language → Danbooru tag examples:
         const ID_ATTRS = ['data-message-id', 'data-msg-id', 'data-chat-message-id', 'data-id', 'data-key', 'data-message-key', 'data-turn-id'];
         let scanCache = null;
         let scanAt = 0;
+        // 화면(자식 노드)이 바뀌었는지. 안 바뀌었으면 계산을 다시 하지 않는다.
+        let dirty = true;
+        let observer = null;
+        const stableIdCache = new WeakMap();
 
         const cfg = () => CSP_EXT.platform || {};
         const safeAll = (root, sel) => {
@@ -8781,14 +8799,69 @@ Natural language → Danbooru tag examples:
             if (!sel || !el?.matches) return false;
             try { return el.matches(sel) || !!el.closest(sel); } catch (_) { return false; }
         };
-        const isOurs = (el) => !!el?.closest?.('.csp-generated-scene-image, .csp-image-history-row, .csp-inline-action-footer, .csp-quick-panel, .csp-overlay, .csp-fab, .csp-header-menu');
+        const OURS = '.csp-generated-scene-image, .csp-image-history-row, .csp-inline-action-footer, .csp-quick-panel, .csp-overlay, .csp-fab, .csp-header-menu, .csp-check-layer, .csp-check-card, .csp-action-toast, .csp-dd-pop, #csp-toast';
+        const isOurs = (el) => !!el?.closest?.(OURS);
+        // a가 b보다 문서에서 앞에 있나 (서로 품지 않는 경우)
+        const isBefore = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-        function invalidate() { scanCache = null; }
+        // 우리 UI가 아닌 곳의 자식 노드가 바뀌면 다음 scan 때 다시 계산
+        function watch() {
+            if (observer || !document.body) return;
+            observer = new MutationObserver((records) => {
+                if (dirty) return;
+                const known = scanCache?.allBodySet;
+                for (const r of records) {
+                    const t = r.target.nodeType === 1 ? r.target : r.target.parentElement;
+                    if (!t || t.closest?.(OURS)) continue;
+                    // 이미 아는 본문 안에서만 바뀐 것(답변 글이 써지는 중)은 본문·하단 구성이 그대로라 무시
+                    if (known && insideKnownBody(t, known)) continue;
+                    dirty = true;
+                    return;
+                }
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
 
-        // 문서 전체를 훑어 본문 ↔ 하단 ↔ 메시지 묶음을 만든다. (짧게 캐시)
+        function insideKnownBody(el, known) {
+            for (let cur = el, i = 0; cur && cur !== document.body && i < 14; cur = cur.parentElement, i++) {
+                if (known.has(cur)) return true;
+            }
+            return false;
+        }
+
+        let version = 0;   // 다시 계산할 때마다 1씩 — 밖에서 "구성이 바뀌었나" 확인용
+        function invalidate() { dirty = true; scanCache = null; }
+
+        // 정렬된 본문 배열에서 node보다 앞에 있는 본문 개수 (이분 탐색)
+        function countBefore(sorted, node) {
+            let lo = 0, hi = sorted.length;
+            while (lo < hi) {
+                const mid = (lo + hi) >> 1;
+                const b = sorted[mid];
+                if (b !== node && !b.contains(node) && isBefore(b, node)) lo = mid + 1; else hi = mid;
+            }
+            return lo;
+        }
+
+        // scope 안에 들어 있는 본문들 (문서 순서상 이어져 있으므로 범위만 훑는다)
+        function bodiesInside(sorted, scope, limit = Infinity) {
+            const out = [];
+            if (!scope || scope.nodeType !== 1 || !scope.firstElementChild) return out;
+            for (let i = countBefore(sorted, scope); i < sorted.length && out.length < limit; i++) {
+                if (scope.contains(sorted[i])) out.push(sorted[i]);
+                else if (isBefore(scope, sorted[i])) break;
+            }
+            return out;
+        }
+
+        // 문서 전체를 훑어 본문 ↔ 하단 ↔ 메시지 묶음을 만든다.
+        // 화면이 안 바뀌었으면 그대로 쓰고, 바뀌어도 0.25초에 한 번까지만 다시 계산한다
+        // (답변이 스트리밍되는 동안 매 프레임 계산하지 않게).
         function scan() {
+            watch();
             const now = performance.now();
-            if (scanCache && now - scanAt < 180) return scanCache;
+            if (scanCache && (!dirty || now - scanAt < 250) && now - scanAt < 4000) return scanCache;
+            dirty = false;
             const c = cfg();
             const bodies = [];
             const footers = [];
@@ -8796,6 +8869,7 @@ Natural language → Danbooru tag examples:
             const bodyOfGroup = new Map();
             const footerOfBody = new Map();
             const bodyOfFooter = new Map();
+            let allBodies = [];
 
             if (c.messageSelector) {
                 safeAll(document, c.messageSelector).forEach(msg => {
@@ -8813,12 +8887,14 @@ Natural language → Danbooru tag examples:
                         bodyOfFooter.set(footer, body);
                     }
                 });
+                allBodies = bodies;
             } else if (c.bodySelector) {
-                safeAll(document, c.bodySelector).forEach(b => { if (!isOurs(b)) bodies.push(b); });
+                const bodySet0 = new Set();
+                safeAll(document, c.bodySelector).forEach(b => { if (!isOurs(b)) { bodies.push(b); bodySet0.add(b); } });
                 // 내 메시지 본문도 묶음 계산에는 넣는다 (하단 줄을 엉뚱한 답변에 붙이지 않게)
-                const userBodies = c.userSelector ? safeAll(document, c.userSelector).filter(u => !bodies.includes(u) && !isOurs(u)) : [];
-                const allBodies = bodies.concat(userBodies).sort(compareDocumentOrder);
-                const isBefore = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+                const userBodies = c.userSelector ? safeAll(document, c.userSelector).filter(u => !bodySet0.has(u) && !isOurs(u)) : [];
+                // querySelectorAll 결과는 이미 문서 순서 — 내 메시지가 섞일 때만 다시 정렬
+                allBodies = userBodies.length ? bodies.concat(userBodies).sort(compareDocumentOrder) : bodies.slice();
                 const link = (body, f, group) => {
                     footerOfBody.set(body, f);
                     bodyOfFooter.set(f, body);
@@ -8828,50 +8904,72 @@ Natural language → Danbooru tag examples:
                         bodyOfGroup.set(group, body);
                     }
                 };
-                const allFooters = safeAll(document, c.footerSelector).filter(f => !isOurs(f) && !allBodies.some(b => f.contains(b) || b.contains(f)));
-                // 1차 — "본문을 품은 가장 가까운 조상" 안에서 하단 바로 앞 본문(없으면 바로 뒤 본문)
-                //       그 본문이 이미 하단을 가졌으면 버리지 않고 같은 조상 안의 빈 본문에 준다.
+                // 하단마다 "바로 앞 본문 / 바로 뒤 본문"만 후보로 본다 (전체를 훑지 않는다)
+                const placed = [];   // [footer, 앞에 있는 본문 수]
+                safeAll(document, c.footerSelector).forEach(f => {
+                    if (isOurs(f)) return;
+                    const p = countBefore(allBodies, f);
+                    const prev = allBodies[p - 1] || null;
+                    const next = allBodies[p] || null;
+                    // 본문 안의 줄이거나, 본문을 품은 큰 칸이면 하단이 아니다
+                    if ((prev && prev.contains(f)) || (next && (f.contains(next) || next.contains(f)))) return;
+                    placed.push([f, p]);
+                });
+                // 1차 — 하단에서 위로 올라가며 앞/뒤 본문 중 먼저 품는 조상을 만나면 그 본문에 (앞 본문 우선)
                 const leftover = [];
-                allFooters.forEach(f => {
+                placed.forEach(([f, p]) => {
+                    const prev = allBodies[p - 1] || null;
+                    const next = allBodies[p] || null;
                     let anc = f.parentElement;
                     for (let i = 0; anc && anc !== document.body && i < 12; i++, anc = anc.parentElement) {
-                        const inside = allBodies.filter(b => anc.contains(b));
-                        if (!inside.length) continue;
-                        const before = inside.filter(b => isBefore(b, f)).reverse();
-                        const after = inside.filter(b => !isBefore(b, f));
-                        const pickBody = [...before, ...after].find(b => !footerOfBody.has(b));
-                        if (pickBody) link(pickBody, f, anc); else leftover.push(f);
+                        const hasPrev = prev && anc.contains(prev);
+                        const hasNext = next && anc.contains(next);
+                        if (!hasPrev && !hasNext) continue;
+                        const pick = [hasPrev ? prev : null, hasNext ? next : null].find(b => b && !footerOfBody.has(b));
+                        if (pick) link(pick, f, anc); else leftover.push([f, p]);
                         break;
                     }
                 });
-                // 2차 — 아직 하단이 없는 본문은 "다음 본문 전까지" 구간에 남은 하단을 잡는다.
+                // 2차 — 하단이 없는 본문은 "다음 본문 전까지" 구간에 남은 하단을 잡는다.
                 //       (이전 응답으로 넘기거나 다시 그려질 때 하단이 늦게 붙는 사이트 대비)
-                const free = allFooters.filter(f => !bodyOfFooter.has(f)).concat(leftover.filter(f => !bodyOfFooter.has(f)));
-                allBodies.forEach((b, i) => {
-                    if (footerOfBody.has(b)) return;
-                    const next = allBodies[i + 1] || null;
-                    const f = free.find(x => !bodyOfFooter.has(x) && isBefore(b, x) && (!next || isBefore(x, next)));
-                    if (!f) return;
-                    let lca = b.parentElement;
-                    while (lca && lca !== document.body && !lca.contains(f)) lca = lca.parentElement;
-                    link(b, f, lca && lca !== document.body && !allBodies.some(o => o !== b && lca.contains(o)) ? lca : null);
+                const freeBySlot = new Map();
+                placed.concat(leftover).forEach(([f, p]) => {
+                    if (bodyOfFooter.has(f)) return;
+                    if (!freeBySlot.has(p)) freeBySlot.set(p, []);
+                    freeBySlot.get(p).push(f);
                 });
+                if (freeBySlot.size) {
+                    allBodies.forEach((b, i) => {
+                        if (footerOfBody.has(b)) return;
+                        const f = (freeBySlot.get(i + 1) || []).find(x => !bodyOfFooter.has(x));
+                        if (!f) return;
+                        let lca = b.parentElement;
+                        while (lca && lca !== document.body && !lca.contains(f)) lca = lca.parentElement;
+                        const clean = lca && lca !== document.body
+                            && !(allBodies[i - 1] && lca.contains(allBodies[i - 1]))
+                            && !(allBodies[i + 1] && lca.contains(allBodies[i + 1]));
+                        link(b, f, clean ? lca : null);
+                    });
+                }
                 allBodies.forEach(b => {
                     if (!groupOfBody.has(b)) { groupOfBody.set(b, b); bodyOfGroup.set(b, b); }
                 });
             }
-            bodies.sort(compareDocumentOrder);
-            scanCache = { bodies, bodySet: new Set(bodies), footers, groupOfBody, bodyOfGroup, footerOfBody, bodyOfFooter, groups: new Set(bodyOfGroup.keys()) };
+            // 본문·하단 구성이 지난번과 정말 달라졌을 때만 version을 올린다
+            const prev = scanCache;
+            const same = (a, b) => a && b && a.length === b.length && a.every((x, i) => x === b[i]);
+            if (!prev || !same(prev.bodies, bodies) || !same(prev.footers, footers)) version++;
+            scanCache = { bodies, allBodies, bodySet: new Set(bodies), allBodySet: new Set(allBodies), footers, groupOfBody, bodyOfGroup, footerOfBody, bodyOfFooter, groups: new Set(bodyOfGroup.keys()) };
             scanAt = now;
             return scanCache;
         }
 
         function isUserBody(body) {
             const c = cfg();
-            if (!body) return false;
-            if (c.userSelector && safeMatches(body, c.userSelector)) return true;
+            if (!body || !c.userSelector) return false;
+            if (safeMatches(body, c.userSelector)) return true;
             const group = scan().groupOfBody.get(body);
-            if (c.userSelector && group && group !== body) {
+            if (group && group !== body) {
                 try { if (group.matches(c.userSelector)) return true; } catch (_) {}
             }
             return false;
@@ -8907,7 +9005,7 @@ Natural language → Danbooru tag examples:
                 if (s.bodyOfFooter.has(cur)) return s.bodyOfFooter.get(cur);
             }
             // 묶음 바깥에서 들어온 경우: 안에 본문이 하나뿐이면 그것
-            const inside = s.bodies.filter(b => el.contains(b));
+            const inside = bodiesInside(s.bodies, el, 2);
             return inside.length === 1 ? inside[0] : null;
         }
 
@@ -8930,42 +9028,57 @@ Natural language → Danbooru tag examples:
             return scan().bodyOfFooter.has(el);
         }
 
+        // 메시지 고유 ID. 한 번 찾으면 그 요소가 살아 있는 동안 기억한다.
         function stableIdOf(body) {
+            const cached = stableIdCache.get(body);
+            if (cached) return cached;
             const c = cfg();
-            const group = scan().groupOfBody.get(body) || body;
-            const attrs = c.idAttribute ? [c.idAttribute, ...ID_ATTRS] : ID_ATTRS;
-            // 묶음 → 위로 몇 칸 (다른 본문을 품기 전까지)
             const s = scan();
-            for (let cur = body, i = 0; cur && cur !== document.body && i < 10; cur = cur.parentElement, i++) {
+            const group = s.groupOfBody.get(body) || body;
+            const attrs = c.idAttribute ? [c.idAttribute, ...ID_ATTRS] : ID_ATTRS;
+            const idx = s.allBodies.indexOf(body);
+            const prev = idx > 0 ? s.allBodies[idx - 1] : null;
+            const next = idx >= 0 ? s.allBodies[idx + 1] : null;
+            let found = '';
+            // 묶음 → 위로 몇 칸 (이웃 본문을 품기 전까지)
+            for (let cur = body, i = 0; cur && cur !== document.body && i < 10 && !found; cur = cur.parentElement, i++) {
                 if (cur !== body && cur !== group && !cur.contains(group)) continue;
-                if (cur !== group && cur.contains(group) && s.bodies.some(b => b !== body && cur.contains(b))) break;
+                if (cur !== group && ((prev && cur.contains(prev)) || (next && cur.contains(next)))) break;
                 for (const a of attrs) {
                     const v = cur.getAttribute?.(a);
-                    if (v && v.length >= 2 && v.length < 120) return `${a.replace(/^data-/, '')}:${v}`;
+                    if (v && v.length >= 2 && v.length < 120) { found = `${a.replace(/^data-/, '')}:${v}`; break; }
                 }
             }
             // 버튼 줄에만 ID가 달린 사이트도 있다 (케이브덕)
-            const footer = s.footerOfBody.get(body);
-            if (footer && c.idAttribute) {
-                const v = footer.getAttribute(c.idAttribute) || footer.querySelector(`[${c.idAttribute}]`)?.getAttribute(c.idAttribute);
-                if (v && v.length < 120) return `${c.idAttribute.replace(/^data-/, '')}:${v}`;
+            if (!found) {
+                const footer = s.footerOfBody.get(body);
+                if (footer && c.idAttribute) {
+                    const v = footer.getAttribute(c.idAttribute) || footer.querySelector(`[${c.idAttribute}]`)?.getAttribute(c.idAttribute);
+                    if (v && v.length < 120) found = `${c.idAttribute.replace(/^data-/, '')}:${v}`;
+                }
             }
-            return '';
+            if (found) stableIdCache.set(body, found);
+            return found;
         }
 
         function allMessages(scope = document) {
             const s = scan();
             const root = scope || document;
-            const out = new Set();
-            s.bodies.forEach(b => {
-                const g = s.groupOfBody.get(b) || b;
-                if (root === document || root.contains?.(g) || g.contains?.(root) || root === g) out.add(g);
-            });
-            return Array.from(out).sort(compareDocumentOrder);
+            if (root === document || root === document.body || root === document.documentElement) {
+                const out = s.bodies.map(b => s.groupOfBody.get(b) || b);
+                return Array.from(new Set(out));
+            }
+            // 이 노드가 메시지 안쪽이면 그 메시지, 아니면 이 노드가 품은 메시지들
+            const own = messageOf(root);
+            if (own) return [own];
+            return Array.from(new Set(bodiesInside(s.bodies, root).map(b => s.groupOfBody.get(b) || b)));
         }
 
-        return { invalidate, scan, messageOf, bodyOf, footerOf, isBody, isAssistantBody, isUserBody, isFooter, stableIdOf, allMessages };
+        return { invalidate, scan, version: () => { scan(); return version; }, messageOf, bodyOf, footerOf, isBody, isAssistantBody, isUserBody, isFooter, stableIdOf, allMessages };
     })();
+
+    // 디버그용: 저장소에 csp_debug=1 이 있을 때만 판별 엔진을 콘솔에 연다
+    if (localStorage.getItem('csp_debug') === '1') window.__cspGEN = GEN;
 
     function getMutationElement(node) {
         if (!node) return null;
@@ -9338,15 +9451,24 @@ Natural language → Danbooru tag examples:
         return !!!!footer;
     }
 
+    // 정리는 화면 구조가 바뀌었을 때만 (버튼 수 · 자동 줄 수 · 답변 판별 결과가 지난번과 같으면 건너뜀)
+    let _cleanupShape = '';
     function cleanupNonAssistantMessageButtons() {
-        document.querySelectorAll('.csp-inline-action-footer').forEach(footer => {
+        const inlines = document.querySelectorAll('.csp-inline-action-footer');
+        const btns = document.querySelectorAll('.csp-message-generate-btn, .csp-message-speed-btn');
+        const structure = isUniversMode() ? document.querySelectorAll(UNI_MSG_SELECTOR).length : GEN.version();
+        const shape = `${inlines.length}|${btns.length}|${structure}`;
+        if (shape === _cleanupShape) return;
+        _cleanupShape = shape;
+        inlines.forEach(footer => {
             const markdown = findPreviousMarkdown(footer)
                 || footer.parentElement?.querySelector?.(':scope > .space-y-3, .space-y-3')
                 || null;
             if (!markdown || !isLikelyAssistantMarkdown(markdown)) footer.remove();
         });
 
-        document.querySelectorAll('.csp-message-generate-btn, .csp-message-speed-btn').forEach(btn => {
+        btns.forEach(btn => {
+            if (!btn.isConnected) return;
             const group = getMessageGroupContainer(btn);
             const markdown = group ? getDirectMarkdown(group) : (btn.closest('[data-message-id]') || findPreviousMarkdown(btn.closest('.csp-inline-action-footer')));
             if (!markdown || !isLikelyAssistantMarkdown(markdown) || (group && !isAssistantMessageGroup(group))) btn.remove();
@@ -10466,7 +10588,7 @@ Natural language → Danbooru tag examples:
                 const result = await searchDanbooruTagbook(query, 40);
                 rerollTagbookSearchResultEl.innerHTML = buildDanbooruSearchResultHtml(result, query);
             } catch (err) {
-                console.error('[Uni Scene Painter] Reroll tagbook search failed:', err);
+                console.warn('[Uni Scene Painter] Reroll tagbook search failed:', err);
                 rerollTagbookSearchResultEl.innerHTML = `<div class="csp-mini-note">검색 실패: ${escapeHtml(err.message || err)}</div>`;
             } finally {
                 if (rerollTagbookSearchRunBtn) {
@@ -10624,7 +10746,7 @@ Natural language → Danbooru tag examples:
                 overlay.remove();
                 showToast('⚙️ 수정 설정으로 리롤 완료');
             } catch (err) {
-                console.error('[Uni Scene Painter] image-specific reroll failed:', err);
+                console.warn('[Uni Scene Painter] image-specific reroll failed:', err);
                 showToast('⚠️ 리롤 실패: ' + err.message);
             } finally {
                 btn.disabled = false;
@@ -11151,7 +11273,7 @@ Natural language → Danbooru tag examples:
                     return;
                 }
             } catch (err) {
-                console.error('[Uni Scene Painter] gallery action failed:', err);
+                console.warn('[Uni Scene Painter] gallery action failed:', err);
                 showToast('⚠️ 갤러리 작업 실패: ' + err.message);
             }
         });
@@ -12221,7 +12343,11 @@ Natural language → Danbooru tag examples:
             if (/embedding|embed/.test(detail)) return '❌ 이 모델은 임베딩 전용이라 채팅에 못 써. 다른 모델로 바꿔줘.';
             return '❌ 요청 형식이 잘못됐어. 모델 ID나 설정을 확인해줘.';
         }
-        if (status === 401) return '🔑 API Key가 틀렸거나 만료됐어. 설정에서 다시 확인해줘.';
+        if (status === 401) {
+            let host = '';
+            try { host = new URL(url).hostname; } catch (_) {}
+            return `🔑 API 키가 틀렸거나 비어 있어${host ? ` (${host})` : ''}. 설정 › API에서 이 공급자의 키를 확인해줘.`;
+        }
         if (status === 403) return '🚫 이 API Key로는 접근이 안 돼. 권한을 확인해줘.';
         if (status === 404) {
             if (/model not found|no endpoints/.test(detail)) return '❌ 없는 모델이야. openrouter.ai/models에서 정확한 모델 ID를 확인해줘.';
@@ -12231,6 +12357,11 @@ Natural language → Danbooru tag examples:
         if (status >= 500 && status < 600) return `🔥 서버 에러 떴어 (${status}). 잠시 후 자동 재시도할게.`;
 
         return String(message || `HTTP ${status}`).replace(/\s+/g, ' ').trim();
+    }
+
+    // 로그용 주소: 쿼리의 key/token 값은 가린다 (Gemini는 ?key= 로 키를 보낸다)
+    function redactUrlForLog(url) {
+        return String(url || '').replace(/([?&](?:key|api_key|apikey|token|access_token)=)[^&]+/gi, '$1***');
     }
 
     function gmRequestJson({ method, url, headers, data, responseType, signal }) {
@@ -12290,24 +12421,20 @@ Natural language → Danbooru tag examples:
                                 responseText: response.responseText
                             });
 
-                            console.error('[Uni Scene Painter] GM request failed:', {
-                                method,
-                                url,
-                                status: response.status,
-                                statusText: response.statusText,
-                                responseText: response.responseText,
-                                responseHeaders: response.responseHeaders
-                            });
+                            // API가 거절한 건 확장의 오류가 아니라서 warn으로 남긴다.
+                            // (error로 남기면 chrome://extensions 의 "오류" 목록에 쌓인다)
+                            // 주소에 붙은 키(?key=)는 지운다.
+                            console.warn(`[Vignette] API 요청 실패 ${response.status} ${method} ${redactUrlForLog(url)}`);
                             // 에러 원인 파악을 위해 응답 본문 전체를 별도 로그로 출력
                             // retry_after_seconds가 있으면 에러 객체에 실어서 withRetry가 활용
                             let retryAfterSec = null;
                             try {
                                 const errBody = JSON.parse(response.responseText);
-                                console.error('[Uni Scene Painter] API 에러 상세:', JSON.stringify(errBody, null, 2));
+                                console.warn('[Vignette] API 응답:', JSON.stringify(errBody).slice(0, 600));
                                 const ra = errBody?.error?.metadata?.retry_after_seconds;
                                 if (ra && Number.isFinite(Number(ra))) retryAfterSec = Math.ceil(Number(ra));
                             } catch (_) {
-                                console.error('[Uni Scene Painter] API 에러 원문:', response.responseText?.slice(0, 1000));
+                                console.warn('[Vignette] API 응답 원문:', String(response.responseText || '').slice(0, 600));
                             }
 
                             const httpErr = new Error(message);
@@ -12332,25 +12459,20 @@ Natural language → Danbooru tag examples:
 
                         finishResolve(JSON.parse(response.responseText));
                     } catch (e) {
-                        console.error('[Uni Scene Painter] GM response parse failed:', { method, url, response, error: e });
+                        console.warn('[Uni Scene Painter] GM response parse failed:', { method, url, response, error: e });
                         finishReject(e);
                     }
                 },
                 onerror: (error) => {
                     if (settled) return;
-                    console.error('[Uni Scene Painter] GM network error:', {
-                        method,
-                        url,
-                        error,
-                        payloadLength: requestPayload ? requestPayload.length : 0
-                    });
+                    console.warn(`[Vignette] 네트워크 오류 ${method} ${redactUrlForLog(url)}`, error?.statusText || error?.error || '');
                     const netErr = new Error('🌐 네트워크 오류: 인터넷 연결이나 API 주소를 확인해줘.');
                     netErr.isNetworkError = true;
                     finishReject(netErr);
                 },
                 ontimeout: () => {
                     if (settled) return;
-                    console.error('[Uni Scene Painter] GM request timeout:', { method, url });
+                    console.warn(`[Vignette] 요청 시간 초과 ${method} ${redactUrlForLog(url)}`);
                     const toErr = new Error('⏱️ 타임아웃: 응답이 너무 오래 걸렸어. 다시 시도해봐.');
                     toErr.httpStatus = 408;
                     finishReject(toErr);
@@ -14335,7 +14457,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 a.remove();
                 showToast('⬇️ 다운로드를 시작했어요.');
             } catch (err) {
-                console.error('[Uni Scene Painter] download failed:', err);
+                console.warn('[Uni Scene Painter] download failed:', err);
                 showToast('⚠️ 다운로드 실패: ' + err.message);
             }
             return;
@@ -14352,7 +14474,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 const filename = await saveImageToChosenFolder(src, record?.plan || {});
                 showToast(`📁 폴더 저장 완료: ${filename}`);
             } catch (err) {
-                console.error('[Uni Scene Painter] folder save failed:', err);
+                console.warn('[Uni Scene Painter] folder save failed:', err);
                 showToast('⚠️ 폴더 저장 실패: ' + err.message);
             }
             return;
@@ -14476,7 +14598,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 setTimeout(() => hideTaskHud(), 400);
                 showToast('🔄 리롤 완료');
             } catch (err) {
-                console.error('[Uni Scene Painter] reroll failed:', err);
+                console.warn('[Uni Scene Painter] reroll failed:', err);
                 hideTaskHud(true);
                 if (!String(err?.message || '').includes('aborted')) showToast('⚠️ 리롤 실패: ' + err.message);
             } finally {
@@ -15591,7 +15713,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 showToast('✅ 선택 문단 기준 재분석 완료');
                 setTimeout(() => hideTaskHud(), 420);
             } catch (err) {
-                console.error('[Uni Scene Painter] paragraph reanalysis failed:', err);
+                console.warn('[Uni Scene Painter] paragraph reanalysis failed:', err);
                 updateTaskHud({ title: '재분석 실패', message: '선택 문단 기준 재분석에 실패했어.\n\n사유: ' + err.message, progress: 100, status: 'error' });
                 showToast('⚠️ 재분석 실패: ' + err.message);
                 setTimeout(() => hideTaskHud(), 1800);
@@ -15653,7 +15775,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 showToast('✅ 추가 요청 반영 완료');
                 setTimeout(() => hideTaskHud(), 420);
             } catch (err) {
-                console.error('[Uni Scene Painter] scene refine request failed:', err);
+                console.warn('[Uni Scene Painter] scene refine request failed:', err);
                 updateTaskHud({ title: '장면 수정 실패', message: '추가 요청 반영에 실패했어.\n\n사유: ' + err.message, progress: 100, status: 'error' });
                 showToast('⚠️ 재분석 요청 실패: ' + err.message);
                 setTimeout(() => hideTaskHud(), 1800);
@@ -15770,7 +15892,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 });
                 _closeModal('done');
             } catch (err) {
-                console.error('[Uni Scene Painter] NAI generation failed:', err);
+                console.warn('[Uni Scene Painter] NAI generation failed:', err);
                 showToast('⚠️ NAI 생성 실패: ' + err.message);
             } finally {
                 btn.disabled = false;
@@ -15942,7 +16064,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
             setTimeout(() => hideTaskHud(), 420);
             markSceneButtons(messageKey, true);
         } catch (err) {
-            console.error('[Uni Scene Painter] speed mode failed:', err);
+            console.warn('[Uni Scene Painter] speed mode failed:', err);
             showToast('⚠️ 생성 실패: ' + err.message);
             hideTaskHud(true);
         } finally {
@@ -16225,7 +16347,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
 
                 showToast(`✅ ${_sceneCount}개 장면 분석/생성 완료`);
             } catch (err) {
-                console.error('[Uni Scene Painter] AI 분석 실패:', err);
+                console.warn('[Uni Scene Painter] AI 분석 실패:', err);
                 showToast('⚠️ 분석 실패: ' + err.message);
                 hideTaskHud(true);
             } finally {
@@ -16239,6 +16361,23 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         return btn;
     }
 
+    // 이미 처리한 답변 기억: 본문 → { 하단, 넣은 버튼, 그때 자식 수 }
+    // 다음 처리 때 이 셋이 그대로면 그 답변은 건너뛴다. (답변이 써지는 동안 0.26초마다
+    // 모든 답변을 처음부터 다시 판별하고 복원 큐에 넣던 것을 없앤다)
+    const _injectDone = new WeakMap();
+
+    function isInjectStillValid(markdown) {
+        const done = _injectDone.get(markdown);
+        if (!done) return false;
+        if (!done.footer.isConnected || !done.btn.isConnected || !done.footer.contains(done.btn)) return false;
+        if (done.count !== markdown.childElementCount) return false;   // 문단이 늘었거나 삽화가 지워짐 → 다시 처리
+        // 삽화가 있던 답변인데 사이트가 다시 그리면서 삽화가 사라졌으면 → 다시 처리(복원)
+        if (done.hadImage && !markdown.querySelector('.csp-generated-scene-image')) return false;
+        // 범용 모드: 하단 짝이 바뀌었으면(늦게 나타난 하단 등) 다시 처리
+        if (!isUniversMode() && done.inline && GEN.footerOf(markdown)) return false;
+        return true;
+    }
+
     function injectMessageButtons() {
         cleanupNonAssistantMessageButtons();
         if (!isEnabled()) return;
@@ -16246,7 +16385,9 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
 
         bubbles.forEach(bubble => {
             const markdown = getDirectMarkdown(bubble);
-            if (!markdown || !isLikelyAssistantMarkdown(markdown) || isUserBubble(bubble)) return;
+            if (!markdown) return;
+            if (isInjectStillValid(markdown)) return;
+            if (!isLikelyAssistantMarkdown(markdown) || isUserBubble(bubble)) return;
 
             const footer = getButtonTargetFooter(bubble, markdown);
             if (!footer) return;
@@ -16272,6 +16413,13 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 const normalBtn = footer.querySelector('.csp-message-generate-btn');
                 if (normalBtn && normalBtn.parentElement) normalBtn.insertAdjacentElement('afterend', speedBtn);
                 else leftSlot.prepend(speedBtn);
+            }
+            const btn = footer.querySelector('.csp-message-generate-btn');
+            if (btn) {
+                // 자식 수는 복원 큐가 삽화를 넣은 뒤 값이 되도록 조금 뒤에 기록한다
+                const record = () => _injectDone.set(markdown, { footer, btn, count: markdown.childElementCount, inline: footer.classList.contains('csp-inline-action-footer'), hadImage: !!markdown.querySelector('.csp-generated-scene-image') });
+                record();
+                setTimeout(record, 400);
             }
         });
     }
@@ -18556,7 +18704,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 refreshHeaderTools();
                 scheduleInject();
             } catch (err) {
-                console.error('[Uni Scene Painter] settings save failed:', err);
+                console.warn('[Uni Scene Painter] settings save failed:', err);
                 showToast('⚠️ 설정 저장 실패: ' + (err.message || err));
                 refreshStorageStatus();
             }
@@ -19249,19 +19397,27 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
     //   · 한 줄에 두 번 붙은 삽화 버튼 정리
     function tidyDomState() {
         if (isUniversMode()) return 0;
-        GEN.invalidate();
+        const inlines = document.querySelectorAll('.csp-inline-action-footer');
+        const gens = document.querySelectorAll('.csp-message-generate-btn');
         const sc = GEN.scan();
+        // 정리할 게 없으면 바로 끝 (대부분의 경우) — 자동 줄도 없고 버튼 수가 본문 수 이하
+        if (!inlines.length && gens.length <= sc.bodies.length) return 0;
         let fixed = 0;
-        document.querySelectorAll('.csp-inline-action-footer').forEach(line => {
+        inlines.forEach(line => {
             const body = line.previousElementSibling;
             if (body && sc.footerOfBody.get(body)) { line.remove(); fixed++; }
         });
-        document.querySelectorAll('.csp-inline-action-footer, ' + (CSP_EXT.platform?.footerSelector || '.csp-none')).forEach(f => {
-            let gens; try { gens = f.querySelectorAll('.csp-message-generate-btn'); } catch (_) { return; }
-            if (gens.length > 1) { gens.forEach((g, i) => { if (i) g.remove(); }); fixed++; }
-            const speeds = f.querySelectorAll('.csp-message-speed-btn');
-            if (speeds.length > 1) { speeds.forEach((g, i) => { if (i) g.remove(); }); fixed++; }
-        });
+        if (gens.length > sc.bodies.length) {
+            // 같은 줄(부모)에 두 번 붙은 버튼만 지운다
+            const seen = new Map();   // 버튼이 붙은 칸 → 이미 본 종류(생성/스피드)
+            document.querySelectorAll('.csp-message-generate-btn, .csp-message-speed-btn').forEach(btn => {
+                const kind = btn.classList.contains('csp-message-speed-btn') ? 'speed' : 'gen';
+                const host = btn.closest('.csp-inline-action-footer, .csp-footer-slot') || btn.parentElement;
+                if (!seen.has(host)) seen.set(host, new Set());
+                const kinds = seen.get(host);
+                if (kinds.has(kind)) { btn.remove(); fixed++; } else kinds.add(kind);
+            });
+        }
         if (fixed) scheduleMessageInject(0);
         return fixed;
     }
@@ -19344,21 +19500,23 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
     }
 
     let _structuralCheckedAt = 0;
+    let _structuralShape = '';
     async function maybeAutoRepair() {
         if (!isAutoRepairOn() || isUniversMode() || !isChatRoomPage()) return;
         const p = CSP_EXT.platform || {};
         if (!p.bodySelector) return;
         const key = location.pathname + '|' + p.bodySelector;
         if (_autoRepairTried === key) return;
-        // 화면에 글이 충분히 있어야 "답변이 있는데 못 찾는" 상황이다
-        if (textLen(document.body) < 400) return;
-        GEN.invalidate();
-        if (GEN.scan().bodies.length) {
+        const sc = GEN.scan();
+        if (sc.bodies.length) {
             // 본문은 찾았지만 짝이 틀린 경우(쪼개진 본문 등)도 확실한 것만 한 번 고쳐 본다
             const sig = key + '|structural';
-            // 같은 설정에선 한 번만 고치고, 검사 자체는 30초에 한 번까지만 (무거운 검사를 매번 돌리지 않게)
-            if (_autoRepairTried !== sig && Date.now() - _structuralCheckedAt > 30000) {
+            // 무거운 검사는 ① 같은 설정에서 아직 안 고쳤고 ② 답변·하단 개수가 지난번과 달라졌고
+            // ③ 30초가 지났을 때만 돌린다. 화면이 그대로면 다시 검사하지 않는다.
+            const shape = `${sc.bodies.length}/${sc.footers.length}/${document.querySelectorAll('.csp-inline-action-footer').length}`;
+            if (_autoRepairTried !== sig && shape !== _structuralShape && Date.now() - _structuralCheckedAt > 30000) {
                 _structuralCheckedAt = Date.now();
+                _structuralShape = shape;
                 const rep = checkSiteDom();
                 const fix = rep.issues.find(i => i.auto && i.fix?.patch);
                 if (fix) {
@@ -19371,6 +19529,8 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
             rememberGoodDomConfig();
             return;
         }
+        // 화면에 글이 충분히 있어야 "답변이 있는데 못 찾는" 상황이다 (정규식 없이 길이만)
+        if ((document.body.textContent || '').length < 600) return;
         _autoRepairTried = key;
         const report = checkSiteDom();
         const fix = report.issues.find(i => i.auto && i.fix?.patch);
@@ -19384,7 +19544,8 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
 
     setTimeout(function domWatch() {
         try {
-            if (CSP_EXT.isContextAlive() && isChatRoomPage()) {
+            // 안 보이는 탭에서는 아무것도 하지 않는다
+            if (!document.hidden && CSP_EXT.isContextAlive() && isChatRoomPage()) {
                 rememberGoodDomConfig();
                 if (isAutoRepairOn()) tidyDomState();
                 maybeAutoRepair();
@@ -20783,6 +20944,12 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         // 상단 도구 버튼은 React가 헤더를 다시 그리면 사라진다. 변경마다 헤더를 뒤지지 않고
         // "우리 버튼이 아직 붙어 있나"만 한 번 확인한다 (id 조회 한 번).
         const needMenu = isChatRoomPage() && CSP_EXT.uiMode !== 'panel' && !document.getElementById('csp-header-tools')?.isConnected;
+        // 이미 답변 처리가 예약돼 있으면 변경 내용을 하나하나 분석할 필요가 없다.
+        // (답변이 써지는 동안 초당 수십 번 들어오는 변경을 매번 훑던 게 가장 큰 낭비였다)
+        if (messageInjectScheduled) {
+            if (needMenu) scheduleMenuInject();
+            return;
+        }
         let needMessages = false;
 
         for (const mutation of mutations) {

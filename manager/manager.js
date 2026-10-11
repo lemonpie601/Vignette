@@ -127,6 +127,18 @@ async function loadAll() {
     applyTheme();
 }
 
+// 장면 기록은 압축돼 있어서 개수를 세려면 풀어야 한다. 값이 그대로면 지난 결과를 쓴다.
+const recordCountCache = new Map();
+function recordCountOf(key, raw) {
+    const s = String(raw || '');
+    const sig = s.length + ':' + s.slice(-24);
+    const hit = recordCountCache.get(key);
+    if (hit && hit.sig === sig) return hit.count;
+    const count = Object.keys(decodeJson(s, {})).length;
+    recordCountCache.set(key, { sig, count });
+    return count;
+}
+
 function buildRooms() {
     const rooms = new Map();
     const ensure = (roomKey) => {
@@ -145,7 +157,7 @@ function buildRooms() {
             r.bytes += String(v).length;
         } else if (key.startsWith(SCENE_RECORDS)) {
             const r = ensure(key.slice(SCENE_RECORDS.length));
-            r.recordCount = Object.keys(decodeJson(v, {})).length;
+            r.recordCount = recordCountOf(key, v);
             r.bytes += String(v).length;
         }
     }
@@ -404,10 +416,10 @@ async function deleteRooms(roomKeys) {
     roomKeys.forEach(rk => delete chats[rk]);
     await chrome.storage.local.set({ [CHATS_KEY]: chats });
     for (const img of state.images) if (set.has(roomKeyOfImage(img))) await DB.deleteImage(img.id);
-    const metas = await DB.listAllMeta().catch(() => []);
-    for (const m of metas) {
-        const prefix = String(m.id).split('::')[0];
-        if (set.has(prefix) || set.has(`univers__${prefix}`)) await DB.deleteMeta(m.id);
+    const metaIds = await DB.listMetaIds().catch(() => []);
+    for (const id of metaIds) {
+        const prefix = String(id).split('::')[0];
+        if (set.has(prefix) || set.has(`univers__${prefix}`)) await DB.deleteMeta(id);
     }
     await loadAll();
 }
@@ -923,15 +935,27 @@ window.addEventListener('hashchange', route);
 $$('.nav a').forEach(a => a.addEventListener('click', () => { state.filter = 'all'; }));
 
 // 다른 탭에서 삽화가 생기면 갱신 (편집 중인 사이트 설정 화면은 건드리지 않는다)
+// 채팅 탭은 설정을 자주 저장한다. 그때마다 전부 다시 읽으면 브라우저 전체가 버벅여서
+//   · 보관함에 영향 있는 키만 보고   · 이 탭이 안 보이면 미뤘다가 보일 때 한 번만   · 1.5초 모아서
+const RELEVANT_KEY = (k) => k === CHATS_KEY || k === P.SITES_KEY || k === LS + 'csp_ext_theme' || k === 'csp_ui_mode_v1'
+    || k.startsWith(LS + SCENE_RECORDS) || k.startsWith(LS + ROOM_SETTINGS);
 let refreshTimer = 0;
-chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
+let refreshPending = false;
+function scheduleRefresh() {
+    if (document.hidden) { refreshPending = true; return; }
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(async () => {
+        refreshPending = false;
         await loadAll();
         const view = location.hash.slice(1).split('=')[0] || 'chats';
         if (['chats', 'chat', 'gallery'].includes(view) && $('#lightbox').hidden) route();
-    }, 600);
+    }, 1500);
+}
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (!Object.keys(changes).some(RELEVANT_KEY)) return;
+    scheduleRefresh();
 });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && refreshPending) scheduleRefresh(); });
 
 loadAll().then(route);

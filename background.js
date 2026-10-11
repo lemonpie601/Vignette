@@ -32,6 +32,7 @@ async function injectCore(tabId, frameId = 0) {
 // ── GM_xmlhttpRequest 대리 ────────────────────────────────────
 function bufToBase64(buf) {
     const bytes = new Uint8Array(buf);
+    if (typeof bytes.toBase64 === 'function') return bytes.toBase64();
     let binary = '';
     const chunk = 0x8000;
     for (let i = 0; i < bytes.length; i += chunk) {

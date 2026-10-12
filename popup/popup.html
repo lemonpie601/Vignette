@@ -5,7 +5,10 @@
 <title>Vignette</title>
 <link rel="stylesheet" href="../manager/theme.css">
 <style>
-  body { width: 300px; margin: 0; padding: 8px; background: var(--surface); color: var(--text); font: 13.5px/1.45 var(--font); }
+  /* 팝업 창 자체가 스크롤되면 스크롤바만큼 오른쪽이 잘린다 → 창은 고정하고 body 안에서만 스크롤.
+     스크롤바 자리(6px)는 처음부터 비워 둬서 내용이 길어져도 폭이 그대로다. */
+  html { overflow: hidden; }
+  body { box-sizing: border-box; width: 316px; max-height: 596px; margin: 0; padding: 8px 2px 8px 8px; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; background: var(--surface); color: var(--text); font: 13.5px/1.45 var(--font); }
   .head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px; }
   .mark { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: linear-gradient(135deg, #8d5a33, #5b3a20); color: #fff8ef; flex: none; }
   .head b { display: block; font-size: 13.5px; font-weight: 800; }

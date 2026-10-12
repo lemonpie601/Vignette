@@ -6030,6 +6030,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     padding: 20px 24px 24px;
     background: var(--csp-elev-1);
     scrollbar-width: thin;
@@ -7267,6 +7268,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     padding: 26px 30px 36px;
     scrollbar-width: thin;
     scrollbar-color: var(--csp-line-strong) transparent;
@@ -7573,7 +7575,7 @@ ${getCompactNsfwSceneAnalysisGuide()}
 .csp-hm-site-state { color: var(--csp-soft); text-align: right; }
 .csp-hm-site-state.is-ok { color: var(--csp-green); }
 .csp-hm-site-state.is-warn { color: var(--csp-warn); }
-.csp-header-menu { max-height: calc(100vh - 16px); overflow-y: auto; }
+.csp-header-menu { max-height: calc(100vh - 16px); overflow-y: auto; overflow-x: hidden; }
 .csp-hm-count.is-set { background: color-mix(in srgb, var(--csp-green) 16%, var(--csp-surface)); color: var(--csp-green); }
 .csp-hm-count.is-unset { background: #e5484d; color: #fff; min-width: 19px; text-align: center; }
 .csp-fab-btn.needs-setup::after {
@@ -7780,13 +7782,13 @@ select.is-dd-open { border-color: var(--csp-accent-line) !important; box-shadow:
     .csp-modal.has-shell > .csp-modal-body,
     .sp-scroll,
     .csp-dd-list { scrollbar-width: auto; scrollbar-color: auto; }
-    :is(.csp-overlay, .csp-quick-panel, .csp-dd-pop, .csp-confirm-backdrop, .csp-lightbox-backdrop, .csp-header-menu) ::-webkit-scrollbar { width: 10px; height: 10px; }
+    :is(.csp-overlay, .csp-quick-panel, .csp-dd-pop, .csp-confirm-backdrop, .csp-lightbox-backdrop, .csp-header-menu) ::-webkit-scrollbar { width: 6px; height: 6px; }
     :is(.csp-overlay, .csp-quick-panel, .csp-dd-pop, .csp-confirm-backdrop, .csp-lightbox-backdrop, .csp-header-menu) ::-webkit-scrollbar-track,
     :is(.csp-overlay, .csp-quick-panel, .csp-dd-pop, .csp-confirm-backdrop, .csp-lightbox-backdrop, .csp-header-menu) ::-webkit-scrollbar-corner { background: transparent; }
     :is(.csp-overlay, .csp-quick-panel, .csp-dd-pop, .csp-confirm-backdrop, .csp-lightbox-backdrop, .csp-header-menu) ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
     :is(.csp-overlay, .csp-quick-panel, .csp-dd-pop, .csp-confirm-backdrop, .csp-lightbox-backdrop, .csp-header-menu) ::-webkit-scrollbar-thumb {
         min-height: 36px;
-        border: 3px solid transparent;
+        border: 1px solid transparent;
         border-radius: 999px;
         background: var(--csp-line-strong);
         background-clip: padding-box;
@@ -7823,10 +7825,10 @@ select.is-dd-open { border-color: var(--csp-accent-line) !important; box-shadow:
 @supports selector(::-webkit-scrollbar) {
     :is(.csp-overlay, .csp-quick-panel, .csp-dd-pop, .csp-confirm-backdrop, .csp-lightbox-backdrop, .csp-header-menu, .csp-check-card) { scrollbar-color: auto; }
     :is(.csp-overlay, .csp-quick-panel, .csp-dd-pop, .csp-confirm-backdrop, .csp-lightbox-backdrop, .csp-header-menu, .csp-check-card) ::-webkit-scrollbar,
-    :is(.csp-header-menu, .csp-check-card)::-webkit-scrollbar { width: 9px; height: 9px; }
+    :is(.csp-header-menu, .csp-check-card)::-webkit-scrollbar { width: 6px; height: 6px; }
     :is(.csp-overlay, .csp-quick-panel, .csp-dd-pop, .csp-confirm-backdrop, .csp-lightbox-backdrop, .csp-header-menu, .csp-check-card) ::-webkit-scrollbar-thumb,
     :is(.csp-header-menu, .csp-check-card)::-webkit-scrollbar-thumb {
-        border: 2.5px solid transparent;
+        border: 1px solid transparent;
         border-radius: 999px;
         background: color-mix(in srgb, var(--csp-text) 20%, transparent);
         background-clip: padding-box;

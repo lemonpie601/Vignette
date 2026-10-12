@@ -94,6 +94,47 @@ function platformName(id) {
     return state.sites[id]?.name || P.BUILTIN_PLATFORMS.find(p => p.id === id)?.name || (id === 'legacy' ? '기타' : id);
 }
 
+// 플랫폼마다 고유 색 (색상각). 기본 사이트는 고정, 추가한 사이트는 이름으로 정한다.
+const PLATFORM_HUE = { univers: 262, caveduck: 172, elyn: 340, rofan: 32, teapot: 140, riru: 205, uumm: 12, legacy: 30 };
+function platformHue(id) {
+    if (PLATFORM_HUE[id] != null) return PLATFORM_HUE[id];
+    let h = 0;
+    for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360;
+    return h;
+}
+const hueStyle = (id) => `style="--h:${platformHue(id)}"`;
+const pTag = (id, extra = '') => `<span class="p-tag ${extra}" ${hueStyle(id)}><i class="p-dot"></i>${esc(platformName(id))}</span>`;
+
+const I = (d) => `<svg class="ico" viewBox="0 0 24 24">${d}</svg>`;
+const ICON = {
+    image: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+    note: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/>',
+    layers: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>',
+    disk: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    chev: '<path d="m6 9 6 6 6-6"/>',
+    right: '<path d="m9 6 6 6-6 6"/>',
+    back: '<path d="m15 6-6 6 6 6"/>',
+    external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5M12 3v12"/>',
+    archive: '<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>',
+    pencil: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+    palette: '<circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2a10 10 0 0 0 0 20c1 0 1.6-.8 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.5-.7-.5-1.1 0-.9.8-1.7 1.7-1.7h2c3 0 5.6-2.5 5.6-5.6C22 6 17.5 2 12 2Z"/>',
+    wrench: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/><path d="m9 12 2 2 4-4"/>',
+    broom: '<path d="M19 3 9.5 12.5M7 11l6 6-2 4c-3 0-7-2-8-5l4-5Z"/>',
+    alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01"/>'
+};
+
+function pageHead(eyebrow, title, desc, right = '') {
+    return `<div class="page-head"><div><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1>${desc ? `<p>${desc}</p>` : ''}</div>${right}</div>`;
+}
+
 function download(name, blob) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -267,17 +308,82 @@ function roomTitle(r) {
     return r.title || (r.platformId === 'legacy' ? '채팅방 밖에서 만든 삽화' : r.chatId);
 }
 
+// "3시간 전" 같은 상대 시간 (일주일 넘으면 날짜)
+function fmtAgo(ts) {
+    if (!ts) return '';
+    const s = (Date.now() - ts) / 1000;
+    if (s < 60) return '방금';
+    if (s < 3600) return `${Math.floor(s / 60)}분 전`;
+    if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
+    if (s < 86400 * 7) return `${Math.floor(s / 86400)}일 전`;
+    const d = new Date(ts);
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 표지: 최근 삽화 최대 3장을 콜라주로
+function coverHtml(r) {
+    const imgs = r.images.slice(0, 3);
+    if (!imgs.length) return `<span class="cover is-empty">${I(ICON.image)}${pTag(r.platformId, 'on-image')}</span>`;
+    return `<span class="cover n${imgs.length}">
+        ${imgs.map(img => `<i data-img-id="${esc(img.id)}"></i>`).join('')}
+        ${pTag(r.platformId, 'on-image')}
+        <span class="count">${I(ICON.image)}${r.images.length}</span>
+    </span>`;
+}
+
 function chatCardHtml(r) {
-    const cover = r.images[0];
-    return `<button class="chat-card" data-room="${esc(r.roomKey)}">
-        <span class="thumb" ${cover ? `data-img-id="${esc(cover.id)}"` : ''}>${cover ? '' : '🎨'}</span>
-        <span style="min-width:0">
+    const when = Math.max(r.lastVisited || 0, r.lastImageAt || 0);
+    return `<button class="chat-card" data-room="${esc(r.roomKey)}" title="${esc(roomTitle(r))}">
+        ${coverHtml(r)}
+        <span class="card-body">
             <span class="title">${esc(roomTitle(r))}</span>
-            <span class="sub mono">${esc(r.chatId)}</span>
-            <span class="stats"><span>🖼 ${r.images.length}</span><span>📝 ${r.recordCount}</span><span>${esc(fmtSize(r.bytes))}</span></span>
-            <span class="sub">${r.lastVisited ? '최근 ' + esc(fmtDate(r.lastVisited)) : r.lastImageAt ? '마지막 삽화 ' + esc(fmtDate(r.lastImageAt)) : ''}</span>
+            <span class="card-meta">
+                <span title="장면 기록">${I(ICON.note)}${r.recordCount}</span>
+                <span title="용량">${I(ICON.disk)}${esc(fmtSize(r.bytes))}</span>
+                ${when ? `<span class="when" title="${esc(fmtDate(when))}">${esc(fmtAgo(when))}</span>` : ''}
+            </span>
         </span>
     </button>`;
+}
+
+const WELCOME_ART = `<svg class="welcome-art" viewBox="0 0 220 180" fill="none">
+    <rect x="34" y="22" width="118" height="140" rx="12" fill="var(--elev)" transform="rotate(-8 93 92)"/>
+    <rect x="62" y="16" width="124" height="148" rx="14" fill="var(--surface)" stroke="var(--line-strong)"/>
+    <rect x="74" y="28" width="100" height="84" rx="8" fill="color-mix(in srgb, var(--accent-2) 22%, var(--elev))"/>
+    <circle cx="150" cy="50" r="10" fill="color-mix(in srgb, var(--accent-2) 70%, #fff)"/>
+    <path d="M74 98 104 66l22 24 14-12 34 30v4a8 8 0 0 1-8 8H82a8 8 0 0 1-8-8Z" fill="var(--accent)" opacity=".85"/>
+    <rect x="74" y="122" width="78" height="8" rx="4" fill="var(--elev-2)"/>
+    <rect x="74" y="138" width="52" height="8" rx="4" fill="var(--elev-2)"/>
+    <circle cx="186" cy="146" r="20" fill="var(--accent)"/>
+    <path d="M178 146h16M186 138v16" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round"/>
+</svg>`;
+
+function welcomeHtml() {
+    return `<div class="welcome">
+        ${WELCOME_ART}
+        <div>
+            <h2>첫 삽화를 기다리고 있어요</h2>
+            <p>채팅방에서 삽화를 만들면 플랫폼 · 채팅별로 여기에 차곡차곡 모여요.</p>
+            <div class="steps">
+                <div class="step"><i>1</i><b>API 키 넣기</b><small>공통 설정에서 NovelAI · 분석 AI 키를 한 번만</small></div>
+                <div class="step"><i>2</i><b>위치 지정</b><small>채팅방 🎨 버튼 › 본문 · 하단 위치를 클릭으로</small></div>
+                <div class="step"><i>3</i><b>삽화 만들기</b><small>답변 아래 버튼을 누르면 장면을 골라 그려요</small></div>
+            </div>
+        </div>
+    </div>`;
+}
+
+function statRowHtml(rooms) {
+    const imgs = rooms.reduce((s, r) => s + r.images.length, 0);
+    const platforms = new Set(rooms.map(r => r.platformId)).size;
+    const last = Math.max(0, ...state.images.map(i => i.createdAt || 0));
+    const tile = (icon, value, label) => `<div class="stat"><span class="stat-icon">${I(icon)}</span><span><b>${value}</b><small>${label}</small></span></div>`;
+    return `<div class="stat-row">
+        ${tile(ICON.chat, rooms.length, '보관 중인 채팅')}
+        ${tile(ICON.image, imgs, '삽화')}
+        ${tile(ICON.layers, platforms, '플랫폼')}
+        ${tile(ICON.clock, last ? esc(fmtAgo(last)) : '—', '마지막 삽화')}
+    </div>`;
 }
 
 // 보관함은 기본으로 "삽화가 있는 채팅"만 보여 준다. 캐릭터 슬롯만 저장해 둔 채팅은
@@ -305,25 +411,25 @@ function renderChats() {
             const collapsed = state.collapsed.has(id) && !q;
             const limit = q ? shown.length : (state.limit.get(id) || PAGE);
             const page = shown.slice(0, limit);
-            return `<section class="platform-group ${collapsed ? 'is-collapsed' : ''}">
-                <h2><button class="group-toggle" data-group="${esc(id)}" aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'} ${esc(platformName(id))}</button>
-                    <small>채팅 ${shown.length} · 이미지 ${shown.reduce((s, r) => s + r.images.length, 0)}</small></h2>
+            return `<section class="platform-group ${collapsed ? 'is-collapsed' : ''}" ${hueStyle(id)}>
+                <div class="group-head"><button class="group-toggle" data-group="${esc(id)}" aria-expanded="${!collapsed}"><svg class="chev" viewBox="0 0 24 24">${ICON.chev}</svg><i class="p-dot"></i>${esc(platformName(id))}</button>
+                    <small>채팅 ${shown.length} · 삽화 ${shown.reduce((s, r) => s + r.images.length, 0)}</small></div>
                 ${collapsed ? '' : `<div class="chat-grid">${page.map(chatCardHtml).join('')}</div>
                 ${shown.length > limit ? `<div class="more"><button class="btn" data-more="${esc(id)}">${shown.length - limit}개 더 보기</button></div>` : ''}`}
             </section>`;
         }).join('');
+    const nothingYet = !rooms.length && !q;
     main.innerHTML = `
-        <div class="page-head">
-            <div><h1>보관함</h1><p>삽화를 만든 채팅만 플랫폼별로 모아 둬요. 들어가 보기만 한 채팅은 쌓이지 않아요.</p></div>
-            <div class="toolbar"><input type="search" id="q" placeholder="채팅 이름 · ID 검색" value="${esc(state.query)}"></div>
-        </div>
-        <div class="chips">${chips.map(([id, label, n]) => `<button class="chip ${state.filter === id ? 'is-active' : ''}" data-filter="${esc(id)}">${esc(label)}<b>${n}</b></button>`).join('')}</div>
+        ${pageHead('LIBRARY', '보관함', '삽화를 만든 채팅만 플랫폼별로 모아 둬요. 들어가 보기만 한 채팅은 쌓이지 않아요.',
+            nothingYet ? '' : `<label class="search">${I(ICON.search)}<input type="search" id="q" placeholder="채팅 이름 · ID 검색" value="${esc(state.query)}"></label>`)}
+        ${nothingYet ? '' : statRowHtml(rooms)}
+        ${nothingYet ? '' : `<div class="chips">${chips.map(([id, label, n]) => `<button class="chip ${state.filter === id ? 'is-active' : ''}" data-filter="${esc(id)}" ${id === 'all' ? '' : hueStyle(id)}>${id === 'all' ? '' : '<i class="p-dot"></i>'}${esc(label)}<b>${n}</b></button>`).join('')}</div>`}
         ${emptyRooms.length ? `<div class="empty-bar">
             <span>삽화 없이 설정만 저장된 채팅 <b>${emptyRooms.length}</b>개</span>
             <span class="toolbar"><button class="btn small" id="toggle-empty">${state.showEmpty ? '숨기기' : '보기'}</button><button class="btn small danger" id="clean-empty">정리</button></span>
         </div>` : ''}
-        ${groups || `<div class="empty">${q ? `"${esc(state.query)}"와 맞는 채팅이 없어요.` : '아직 삽화를 만든 채팅이 없어요.<br>채팅방에서 🎨 메뉴로 삽화를 만들면 여기에 모여요.'}</div>`}`;
-    $('#q').addEventListener('input', (e) => {
+        ${groups || (q ? `<div class="empty">"${esc(state.query)}"와 맞는 채팅이 없어요.</div>` : welcomeHtml())}`;
+    $('#q')?.addEventListener('input', (e) => {
         state.query = e.target.value;
         const pos = e.target.selectionStart;
         renderChats();
@@ -358,36 +464,39 @@ function renderChat(roomKey) {
     const r = state.rooms.get(roomKey);
     const main = $('#main');
     if (!r) {
-        main.innerHTML = `<div class="page-head"><div><h1>채팅을 찾을 수 없어요</h1><p class="mono">${esc(roomKey)}</p></div></div>
-            <a class="btn" href="#chats">← 보관함</a>`;
+        main.innerHTML = `<a class="back" href="#chats">${I(ICON.back)}보관함</a>
+            ${pageHead('NOT FOUND', '채팅을 찾을 수 없어요', `<span class="mono">${esc(roomKey)}</span>`)}`;
         return;
     }
+    const cover = r.images[0];
     main.innerHTML = `
-        <div class="page-head"><a class="btn ghost" href="#chats">← 보관함</a></div>
-        <div class="panel">
-            <div class="detail-head">
-                <div style="min-width:0">
-                    <span class="badge">${esc(platformName(r.platformId))}</span>
-                    <div class="title" id="chat-title">${esc(roomTitle(r))}</div>
-                    <dl class="kv">
-                        <dt>채팅 ID</dt><dd class="mono">${esc(r.chatId)}</dd>
-                        <dt>저장 키</dt><dd class="mono">${esc(r.roomKey)}</dd>
-                        <dt>처음 방문</dt><dd>${esc(fmtDate(r.firstSeen))}</dd>
-                        <dt>최근 방문</dt><dd>${esc(fmtDate(r.lastVisited))}</dd>
-                        <dt>보관</dt><dd>이미지 ${r.images.length}장 · 장면 기록 ${r.recordCount}개 · ${esc(fmtSize(r.bytes))}${r.hasSettings ? ' · 방 설정 있음' : ''}</dd>
-                    </dl>
+        <a class="back" href="#chats">${I(ICON.back)}보관함</a>
+        <section class="detail-hero">
+            <span class="bg" ${cover ? `data-img-id="${esc(cover.id)}"` : ''}></span>
+            <span class="detail-cover" ${cover ? `data-img-id="${esc(cover.id)}"` : ''}></span>
+            <div style="min-width:0">
+                ${pTag(r.platformId, 'on-image')}
+                <div class="title" id="chat-title">${esc(roomTitle(r))}</div>
+                <div class="facts">
+                    <span>삽화 <b>${r.images.length}</b>장</span>
+                    <span>장면 기록 <b>${r.recordCount}</b>개</span>
+                    <span><b>${esc(fmtSize(r.bytes))}</b></span>
+                    ${r.hasSettings ? '<span>방 설정 있음</span>' : ''}
+                    <span>최근 방문 ${esc(fmtDate(r.lastVisited))}</span>
+                    <span class="mono" title="저장 키 ${esc(r.roomKey)}">ID ${esc(r.chatId)}</span>
                 </div>
-                <div class="actions" style="margin:0">
-                    ${r.url ? `<a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">채팅 열기</a>` : ''}
-                    <button class="btn" id="rename">이름 바꾸기</button>
-                    <button class="btn" id="zip" ${r.images.length ? '' : 'disabled'}>이미지 ZIP</button>
-                    <button class="btn" id="export">이 채팅 백업</button>
-                    <button class="btn danger" id="delete">삭제</button>
+                <div class="actions">
+                    ${r.url ? `<a class="btn light" href="${esc(r.url)}" target="_blank" rel="noopener">${I(ICON.external)}채팅 열기</a>` : ''}
+                    <button class="btn glass" id="rename">${I(ICON.pencil)}이름 바꾸기</button>
+                    <button class="btn glass" id="zip" ${r.images.length ? '' : 'disabled'}>${I(ICON.download)}이미지 ZIP</button>
+                    <button class="btn glass" id="export">${I(ICON.archive)}이 채팅 백업</button>
+                    <button class="btn glass danger" id="delete">${I(ICON.trash)}삭제</button>
                 </div>
             </div>
-        </div>
+        </section>
+        <h2 class="section-title">삽화 <small>최근 만든 순 · 누르면 크게 보기</small></h2>
         ${r.images.length ? `<div class="img-grid">${r.images.map((img, i) => `
-            <button class="img-cell" data-index="${i}"><img alt="" data-img-id="${esc(img.id)}"><span class="cap">${esc(fmtDate(img.createdAt))}</span></button>`).join('')}</div>`
+            <button class="img-cell" data-index="${i}"><img alt="" data-img-id="${esc(img.id)}"><span class="cap"><span>${esc(fmtDate(img.createdAt))}</span></span></button>`).join('')}</div>`
             : '<div class="empty">이 채팅에는 저장된 이미지가 없어요.</div>'}`;
     observeImages(main);
     $$('.img-cell', main).forEach(c => c.onclick = () => openLightbox(r.images, Number(c.dataset.index), r));
@@ -505,20 +614,20 @@ function renderGallery() {
     const platforms = Array.from(new Set(all.map(img => P.parseRoomKey(roomKeyOfImage(img)).platformId)));
     const list = state.filter === 'all' ? all : all.filter(img => P.parseRoomKey(roomKeyOfImage(img)).platformId === state.filter);
     main.innerHTML = `
-        <div class="page-head">
-            <div><h1>전체 갤러리</h1><p>모든 플랫폼에서 만든 삽화 ${all.length}장</p></div>
-            <div class="toolbar"><button class="btn" id="zip-all" ${list.length ? '' : 'disabled'}>보이는 이미지 ZIP</button></div>
-        </div>
-        <div class="chips">${[['all', '전체', all.length], ...platforms.map(id => [id, platformName(id), all.filter(img => P.parseRoomKey(roomKeyOfImage(img)).platformId === id).length])]
-            .map(([id, label, n]) => `<button class="chip ${state.filter === id ? 'is-active' : ''}" data-filter="${esc(id)}">${esc(label)}<b>${n}</b></button>`).join('')}</div>
+        ${pageHead('GALLERY', '전체 갤러리', `모든 플랫폼에서 만든 삽화 <b>${all.length}</b>장을 한곳에서 봐요.`,
+            all.length ? `<div class="toolbar"><button class="btn" id="zip-all" ${list.length ? '' : 'disabled'}>${I(ICON.download)}보이는 이미지 ZIP</button></div>` : '')}
+        ${all.length ? `<div class="chips">${[['all', '전체', all.length], ...platforms.map(id => [id, platformName(id), all.filter(img => P.parseRoomKey(roomKeyOfImage(img)).platformId === id).length])]
+            .map(([id, label, n]) => `<button class="chip ${state.filter === id ? 'is-active' : ''}" data-filter="${esc(id)}" ${id === 'all' ? '' : hueStyle(id)}>${id === 'all' ? '' : '<i class="p-dot"></i>'}${esc(label)}<b>${n}</b></button>`).join('')}</div>` : ''}
         ${list.length ? `<div class="img-grid">${list.map((img, i) => {
             const rk = roomKeyOfImage(img);
             const r = state.rooms.get(rk);
-            return `<button class="img-cell" data-index="${i}"><img alt="" data-img-id="${esc(img.id)}"><span class="cap">${esc(r ? roomTitle(r) : rk)}</span></button>`;
-        }).join('')}</div>` : '<div class="empty">이미지가 없어요.</div>'}`;
+            const pid = P.parseRoomKey(rk).platformId;
+            return `<button class="img-cell" data-index="${i}"><img alt="" data-img-id="${esc(img.id)}"><span class="cap" ${hueStyle(pid)}><i class="p-dot"></i><span>${esc(r ? roomTitle(r) : rk)}</span></span></button>`;
+        }).join('')}</div>` : welcomeHtml()}`;
     $$('.chip', main).forEach(c => c.onclick = () => { state.filter = c.dataset.filter; renderGallery(); });
     $$('.img-cell', main).forEach(c => c.onclick = () => openLightbox(list, Number(c.dataset.index), null));
-    $('#zip-all').onclick = () => zipImages(list, 'vignette_gallery');
+    const zipAll = $('#zip-all');
+    if (zipAll) zipAll.onclick = () => zipImages(list, 'vignette_gallery');
     observeImages(main);
 }
 
@@ -560,16 +669,22 @@ function siteCardHtml(s) {
     const builtin = P.BUILTIN_PLATFORMS.find(p => p.id === s.id);
     const ready = s.mode === 'univers' || !!s.bodySelector;
     const val = (k) => k === 'hosts' ? (s.hosts || []).join(', ') : (s[k] ?? '');
-    return `<div class="site-card" data-site="${esc(s.id)}">
+    const name = s.name || s.id;
+    const on = s.enabled !== false;
+    return `<div class="site-card ${on ? '' : 'is-off'}" data-site="${esc(s.id)}" ${hueStyle(s.id)}>
         <header>
-            <span><b>${esc(s.name || s.id)}</b> <span class="muted">${esc((s.hosts || []).join(', '))}</span><br>
-            <span class="state ${ready ? 'ok' : 'warn'}">${s.mode === 'univers' ? '자동 인식' : ready ? '위치 지정됨' : '본문 위치 지정 필요 — 채팅방에서 🎨 › 본문 위치 지정'}</span>
-            ${s.userEdited && builtin ? '<span class="badge">직접 수정함</span>' : ''}${s.custom ? '<span class="badge">추가한 사이트</span>' : ''}
-            ${s.custom ? '<span class="perm-slot"></span>' : ''}</span>
-            <label class="switch" title="이 사이트에서 사용"><input type="checkbox" data-enabled ${s.enabled !== false ? 'checked' : ''}><span></span></label>
+            <span class="avatar">${esc(Array.from(name)[0]?.toUpperCase() || '?')}</span>
+            <span class="site-title"><b>${esc(name)}</b><span class="hosts mono">${esc((s.hosts || []).join(', ') || '도메인 없음')}</span></span>
+            <label class="switch" title="${on ? '이 사이트에서 사용 중' : '꺼져 있음'}"><input type="checkbox" data-enabled ${on ? 'checked' : ''}><span></span></label>
         </header>
+        <div class="site-tags">
+            <span class="state ${s.mode === 'univers' ? 'auto' : ready ? 'ok' : 'warn'}">${s.mode === 'univers' ? '자동 인식' : ready ? '위치 지정됨' : '위치 지정 필요'}</span>
+            ${s.userEdited && builtin ? '<span class="badge">직접 수정함</span>' : ''}${s.custom ? '<span class="badge">추가한 사이트</span>' : ''}
+            ${s.custom ? '<span class="perm-slot"></span>' : ''}
+        </div>
+        ${!ready ? '<p class="site-hint">그 사이트 채팅방에서 🎨 버튼 › <b>본문 위치 지정</b>으로 AI 답변을 한 번 클릭해 주세요.</p>' : ''}
         <details>
-            <summary>세부 설정</summary>
+            <summary><svg viewBox="0 0 24 24">${ICON.right}</svg>세부 설정</summary>
             <div class="fields">
                 ${FIELD_SPECS.map(([k, label, hint]) => `<label for="f-${esc(s.id)}-${k}">${label}${hint ? `<small>${hint}</small>` : ''}</label>
                 ${k === 'mode'
@@ -587,11 +702,9 @@ function siteCardHtml(s) {
 function renderSites() {
     const main = $('#main');
     main.innerHTML = `
-        <div class="page-head">
-            <div><h1>사이트 설정</h1><p>사이트마다 본문 · 하단 위치를 기억해요. 보통은 채팅방에서 🎨 버튼 › 위치 지정으로 고르면 되고, 여기서는 직접 고칠 수 있어요.</p></div>
-            <form class="add-site" id="add-site-form"><input type="text" id="add-site-host" placeholder="example.com" spellcheck="false" autocomplete="off"><button class="btn primary" type="submit">+ 사이트 추가</button></form>
-        </div>
-        ${allSites().map(siteCardHtml).join('')}`;
+        ${pageHead('SITES', '사이트 설정', '사이트마다 본문 · 하단 위치를 기억해요. 보통은 채팅방에서 🎨 버튼 › 위치 지정으로 고르면 되고, 여기서는 직접 고칠 수 있어요.',
+            `<form class="add-site" id="add-site-form"><input type="text" id="add-site-host" placeholder="새 사이트 도메인 (example.com)" spellcheck="false" autocomplete="off"><button class="btn primary" type="submit">${I(ICON.plus)}추가</button></form>`)}
+        <div class="site-grid">${allSites().map(siteCardHtml).join('')}</div>`;
     // 사이트 추가: 그 사이트만 접근 허용을 받는다 (버튼을 누른 바로 그 순간에 물어야 크롬이 창을 띄운다)
     $('#add-site-form').onsubmit = (e) => {
         e.preventDefault();
@@ -628,7 +741,7 @@ function renderSites() {
             await chrome.storage.local.set({ [P.SITES_KEY]: sites });
             await loadAll();
         };
-        $('[data-enabled]', card).onchange = async (e) => { await update({ enabled: e.target.checked }); toast(e.target.checked ? '켰어요. 열려 있는 탭은 새로고침해줘.' : '껐어요. 열려 있는 탭은 새로고침해줘.'); };
+        $('[data-enabled]', card).onchange = async (e) => { card.classList.toggle('is-off', !e.target.checked); await update({ enabled: e.target.checked }); toast(e.target.checked ? '켰어요. 열려 있는 탭은 새로고침해줘.' : '껐어요. 열려 있는 탭은 새로고침해줘.'); };
         card.addEventListener('click', async (e) => {
             const act = e.target.closest('[data-act]')?.dataset.act;
             if (!act) return;
@@ -822,45 +935,53 @@ async function importBackup(file, mode) {
 function renderBackup() {
     const main = $('#main');
     const platforms = Array.from(new Set(Array.from(state.rooms.values()).map(r => r.platformId))).filter(id => id !== 'legacy');
+    const chatCount = Array.from(state.rooms.values()).filter(hasImages).length;
     main.innerHTML = `
-        <div class="page-head"><div><h1>백업 · 복원</h1><p>설정 · 방별 설정 · 장면 기록 · 이미지를 파일로 보관하고 되살려요.</p></div></div>
-        <div class="panel backup-hero">
+        ${pageHead('BACKUP', '백업 · 복원', '설정 · 방별 설정 · 장면 기록 · 이미지를 파일로 보관하고 되살려요.')}
+        <section class="backup-hero">
+            <svg class="hero-art" viewBox="0 0 24 24">${ICON.archive}</svg>
             <div>
                 <h2>ZIP으로 전부 내려받기</h2>
-                <p class="muted">데이터 + 모든 이미지를 <b>플랫폼 › 채팅 › 날짜</b> 폴더로 정리해서 ZIP 하나로 받아요. 이 ZIP 그대로 복원할 수도 있어요.</p>
-                <p class="muted">이미지 ${state.images.length}장 · 약 ${fmtSize(storageBreakdown().total)}</p>
+                <p>데이터와 모든 이미지를 <b>플랫폼 › 채팅 › 날짜</b> 폴더로 정리해서 ZIP 하나로 받아요. 이 ZIP 그대로 복원할 수도 있어요.</p>
+                <div class="meta"><span>삽화 ${state.images.length}장</span><span>채팅 ${chatCount}개</span><span>약 ${fmtSize(storageBreakdown().total)}</span></div>
             </div>
-            <button class="btn primary big" id="bk-zip-all">ZIP 전체 백업</button>
-        </div>
-        <div class="panel">
-            <h2>골라서 백업</h2>
-            <div class="form-row"><span class="label"><b>범위</b><small>전체 또는 플랫폼 하나만</small></span>
-                <select id="bk-scope"><option value="">전체</option>${platforms.map(id => `<option value="${esc(id)}">${esc(platformName(id))}</option>`).join('')}</select></div>
-            <div class="form-row"><span class="label"><b>형식</b><small>ZIP: 이미지를 파일로 꺼내 볼 수 있음 · .cspbak: 복원 전용 파일 하나</small></span>
-                <select id="bk-format"><option value="zip">ZIP (데이터 + 이미지 폴더)</option><option value="cspbak">.cspbak (데이터 한 파일)</option></select></div>
-            <div class="form-row"><span class="label"><b>API 키 포함</b><small>다른 사람에게 줄 파일이면 끄세요</small></span>
-                <label class="switch"><input type="checkbox" id="bk-secrets"><span></span></label></div>
-            <div class="actions"><button class="btn primary" id="bk-go">백업 파일 저장</button></div>
-        </div>
-        <div class="panel">
-            <h2>복원하기</h2>
-            <div class="form-row"><span class="label"><b>방식</b><small>합치기: 지금 있는 값은 그대로 두고 없는 것만 채움 · 덮어쓰기: 백업 값으로 바꿈</small></span>
-                <select id="rs-mode"><option value="merge">합치기</option><option value="overwrite">덮어쓰기</option></select></div>
-            <div class="actions"><label class="btn primary">백업 파일 고르기 (.zip · .cspbak)<input type="file" id="rs-file" accept=".zip,.cspbak,.json,.gz" hidden></label></div>
+            <button class="btn light big" id="bk-zip-all">${I(ICON.download)}ZIP 전체 백업</button>
+        </section>
+        <div class="two-col">
+            <section class="panel">
+                <div class="panel-head"><span class="panel-icon">${I(ICON.archive)}</span><div><h2>골라서 백업</h2><small>범위와 형식을 정해서 저장</small></div></div>
+                <div class="form-row"><span class="label"><b>범위</b><small>전체 또는 플랫폼 하나만</small></span>
+                    <select id="bk-scope"><option value="">전체</option>${platforms.map(id => `<option value="${esc(id)}">${esc(platformName(id))}</option>`).join('')}</select></div>
+                <div class="form-row"><span class="label"><b>형식</b><small>ZIP은 이미지를 파일로 꺼내 볼 수 있어요</small></span>
+                    <select id="bk-format"><option value="zip">ZIP (데이터 + 이미지 폴더)</option><option value="cspbak">.cspbak (데이터 한 파일)</option></select></div>
+                <div class="form-row"><span class="label"><b>API 키 포함</b><small>다른 사람에게 줄 파일이면 끄세요</small></span>
+                    <label class="switch"><input type="checkbox" id="bk-secrets"><span></span></label></div>
+                <div class="actions"><button class="btn primary" id="bk-go">${I(ICON.download)}백업 파일 저장</button></div>
+            </section>
+            <section class="panel">
+                <div class="panel-head"><span class="panel-icon">${I(ICON.upload)}</span><div><h2>복원하기</h2><small>.zip · .cspbak 파일에서 되살리기</small></div></div>
+                <div class="form-row"><span class="label"><b>방식</b><small>합치기: 없는 것만 채움 · 덮어쓰기: 백업 값으로 바꿈</small></span>
+                    <select id="rs-mode"><option value="merge">합치기</option><option value="overwrite">덮어쓰기</option></select></div>
+                <label class="drop" id="rs-drop">${I(ICON.upload)}<span><b>백업 파일 고르기</b><br><small>또는 여기로 끌어다 놓기</small></span>
+                    <input type="file" id="rs-file" accept=".zip,.cspbak,.json,.gz" hidden></label>
+            </section>
         </div>`;
     $('#bk-zip-all').onclick = () => exportBackup({ includeSecrets: $('#bk-secrets').checked, name: 'vignette_all', format: 'zip' });
     $('#bk-go').onclick = () => {
         const scope = $('#bk-scope').value;
         exportBackup({ platformId: scope || null, includeSecrets: $('#bk-secrets').checked, name: scope ? `vignette_${scope}` : 'vignette_all', format: $('#bk-format').value });
     };
-    $('#rs-file').onchange = (e) => {
-        const f = e.target.files?.[0];
+    const restore = (f) => {
         if (!f) return;
         const mode = $('#rs-mode').value;
         if (mode === 'overwrite' && !confirm('같은 항목은 백업 값으로 덮어써요. 진행할까요?')) return;
         importBackup(f, mode);
-        e.target.value = '';
     };
+    $('#rs-file').onchange = (e) => { restore(e.target.files?.[0]); e.target.value = ''; };
+    const drop = $('#rs-drop');
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
+    drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('is-over'); restore(e.dataTransfer?.files?.[0]); });
 }
 
 // ── 공통 설정 · API 키 ───────────────────────────────────────
@@ -965,8 +1086,7 @@ function renderKeys() {
 
     main.innerHTML = `
         <div class="keys-page">
-            <div class="page-head"><div><h1>공통 설정 · API 키</h1>
-                <p>여기 넣은 값은 <b>모든 사이트 · 모든 채팅</b>에서 같이 써요. 채팅방 🎨 › 설정 › API 탭과 같은 값이에요.</p></div></div>
+            ${pageHead('API KEYS', '공통 설정 · API 키', '여기 넣은 값은 <b>모든 사이트 · 모든 채팅</b>에서 같이 써요. 채팅방 🎨 › 설정 › API 탭과 같은 값이에요.')}
 
             <div class="ready-banner ${ready ? 'is-ok' : 'is-warn'}">
                 <span class="ready-icon">${ready ? '✓' : '!'}</span>
@@ -1109,50 +1229,68 @@ function collectKeyForm() {
 }
 
 // ── 환경설정 ─────────────────────────────────────────────────
+// 메뉴 열기 방식 미리보기 그림 (작은 브라우저 창)
+const MINI_UI = {
+    fab: '<i class="bar"></i><i class="ln" style="top:24px;width:58%"></i><i class="ln" style="top:36px;width:44%"></i><i class="ln" style="top:48px;width:52%"></i><i class="fab"></i>',
+    panel: '<i class="bar"></i><i class="ext"></i><i class="pop"></i><i class="ln" style="top:24px;width:40%"></i><i class="ln" style="top:36px;width:30%"></i>',
+    both: '<i class="bar"></i><i class="ext"></i><i class="pop"></i><i class="ln" style="top:24px;width:40%"></i><i class="fab" style="right:auto;left:62px"></i>'
+};
+
 function renderPrefs() {
     const main = $('#main');
     const theme = state.store[LS + 'csp_ext_theme'] || 'warm';
     const uiMode = state.store.csp_ui_mode_v1 || 'fab';
+    const themeNow = theme === 'site' ? 'auto' : theme;
+    const opt = (name, value, checked, mini, title, desc) => `<label class="opt">
+        <input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''}>
+        <span class="mini ${mini}">${name === 'theme' ?'<i class="card"></i><i class="dot-a"></i><i class="ln a"></i><i class="ln b"></i><i class="ln c"></i>' : ''}${MINI_UI[value] || ''}</span>
+        <span><b>${title}</b><small>${desc}</small></span>
+    </label>`;
     main.innerHTML = `
-        <div class="page-head"><div><h1>환경설정</h1><p>이미지 생성 옵션 · API 키 · 프롬프트는 채팅방의 🎨 › 설정에서 바꿔요.</p></div></div>
-        <div class="panel">
-            <div class="form-row"><span class="label"><b>메뉴 열기</b><small>플로팅 버튼: 채팅 화면에 🎨 버튼 · 확장 패널: 툴바의 확장 아이콘(단축키 Alt+Shift+S)</small></span>
-                <select id="pf-uimode">
-                    <option value="fab" ${uiMode === 'fab' ? 'selected' : ''}>플로팅 버튼</option>
-                    <option value="panel" ${uiMode === 'panel' ? 'selected' : ''}>확장 패널</option>
-                    <option value="both" ${uiMode === 'both' ? 'selected' : ''}>둘 다</option>
-                </select></div>
-            <div class="form-row"><span class="label"><b>테마</b><small>채팅 화면의 메뉴 · 설정창 · 퀵 패널 색</small></span>
-                <select id="pf-theme">
-                    <option value="warm" ${theme === 'warm' ? 'selected' : ''}>따뜻한 베이지 (기본)</option>
-                    <option value="dark" ${theme === 'dark' ? 'selected' : ''}>다크</option>
-                    <option value="light" ${theme === 'light' ? 'selected' : ''}>라이트</option>
-                    <option value="auto" ${theme === 'auto' || theme === 'site' ? 'selected' : ''}>시스템 설정 따라가기 (밝게/어둡게)</option>
-                </select></div>
-            <div class="form-row"><span class="label"><b>위치 자동 복구</b><small>사이트가 바뀌어서 AI 답변을 못 찾으면 규칙에 따라 알아서 고쳐요 (되돌리기 가능)</small></span>
+        ${pageHead('PREFERENCES', '환경설정', '이미지 생성 옵션 · 프롬프트는 채팅방의 🎨 › 설정에서 바꿔요.')}
+        <section class="panel">
+            <div class="panel-head"><span class="panel-icon">${I(ICON.monitor)}</span><div><h2>메뉴 열기</h2><small>채팅 화면에서 Vignette 메뉴를 어디서 열지</small></div></div>
+            <div class="opt-grid">
+                ${opt('uimode', 'fab', uiMode === 'fab', 'theme-none', '플로팅 버튼', '화면 구석의 둥근 버튼')}
+                ${opt('uimode', 'panel', uiMode === 'panel', 'theme-none', '확장 패널', '툴바 아이콘 · Alt+Shift+S')}
+                ${opt('uimode', 'both', uiMode === 'both', 'theme-none', '둘 다', '버튼과 패널 모두')}
+            </div>
+        </section>
+        <section class="panel">
+            <div class="panel-head"><span class="panel-icon">${I(ICON.palette)}</span><div><h2>테마</h2><small>이 관리 페이지와 채팅 화면의 메뉴 · 설정창 · 퀵 패널 색</small></div></div>
+            <div class="opt-grid">
+                ${opt('theme', 'warm', themeNow === 'warm', 'theme-warm', '따뜻한 베이지', '기본')}
+                ${opt('theme', 'dark', themeNow === 'dark', 'theme-dark', '다크', '어두운 화면')}
+                ${opt('theme', 'light', themeNow === 'light', 'theme-light', '라이트', '밝고 깔끔하게')}
+                ${opt('theme', 'auto', themeNow === 'auto', 'theme-auto', '시스템 따라가기', '밝게 / 어둡게 자동')}
+            </div>
+        </section>
+        <section class="panel">
+            <div class="panel-head"><span class="panel-icon">${I(ICON.wrench)}</span><div><h2>위치 자동 복구</h2><small>사이트가 바뀌어도 알아서</small></div></div>
+            <div class="form-row"><span class="label"><b>자동 복구 켜기</b><small>사이트 구조가 바뀌어서 AI 답변을 못 찾으면 규칙에 따라 알아서 고쳐요 (되돌리기 가능)</small></span>
                 <label class="switch"><input type="checkbox" id="pf-autorepair" ${state.store[LS + 'csp_ext_autorepair'] !== 'off' ? 'checked' : ''}><span></span></label></div>
-        </div>
-        <div class="panel">
-            <h2>정리</h2>
+        </section>
+        <section class="panel is-danger">
+            <div class="panel-head"><span class="panel-icon">${I(ICON.alert)}</span><div><h2>정리 · 삭제</h2><small>되돌릴 수 없는 작업이에요. 먼저 백업을 권해요.</small></div></div>
             <div class="form-row"><span class="label"><b>고아 이미지 정리</b><small>어떤 장면 기록에도 연결되지 않은 이미지를 찾아 지워요</small></span>
-                <button class="btn" id="pf-orphans">찾기</button></div>
-            <div class="form-row"><span class="label"><b>모든 데이터 삭제</b><small>설정 · 기록 · 이미지 · 사이트 설정 전부. 되돌릴 수 없어요.</small></span>
-                <button class="btn danger" id="pf-wipe">전부 삭제</button></div>
-        </div>`;
-    $('#pf-uimode').onchange = async (e) => {
-        await chrome.storage.local.set({ csp_ui_mode_v1: e.target.value });
+                <button class="btn" id="pf-orphans">${I(ICON.broom)}찾기</button></div>
+            <div class="form-row"><span class="label"><b>모든 데이터 삭제</b><small>설정 · 기록 · 이미지 · 사이트 설정 전부</small></span>
+                <button class="btn danger" id="pf-wipe">${I(ICON.trash)}전부 삭제</button></div>
+        </section>`;
+    $$('input[name="uimode"]', main).forEach(r => r.onchange = async () => {
+        await chrome.storage.local.set({ csp_ui_mode_v1: r.value });
         await loadAll();
         toast('바꿨어요. 열려 있는 채팅 화면에 바로 반영돼요.');
-    };
+    });
+    $$('input[name="theme"]', main).forEach(r => r.onchange = async () => {
+        await chrome.storage.local.set({ [LS + 'csp_ext_theme']: r.value });
+        await loadAll();
+        toast('바꿨어요. 채팅 화면은 메뉴를 다시 열면 반영돼요.');
+    });
     $('#pf-autorepair').onchange = async (e) => {
         await chrome.storage.local.set({ [LS + 'csp_ext_autorepair']: e.target.checked ? 'on' : 'off' });
         await loadAll();
         toast(e.target.checked ? '자동 복구를 켰어요.' : '자동 복구를 껐어요.');
-    };
-    $('#pf-theme').onchange = async (e) => {
-        await chrome.storage.local.set({ [LS + 'csp_ext_theme']: e.target.value });
-        await loadAll();
-        toast('바꿨어요. 채팅 화면은 메뉴를 다시 열면 반영돼요.');
     };
     $('#pf-orphans').onclick = async () => {
         const used = new Set();
@@ -1188,6 +1326,15 @@ function route() {
     let view = hash.split('=')[0];
     if (hash.startsWith('chat=')) view = 'chats';
     $$('.nav a').forEach(a => a.classList.toggle('is-active', a.dataset.view === view));
+    // 화면을 바꿀 때만 살짝 떠오르는 효과 (같은 화면 새로고침은 그대로)
+    const main = $('#main');
+    if (main.dataset.view !== hash) {
+        main.dataset.view = hash;
+        main.classList.remove('view-enter');
+        void main.offsetWidth;
+        main.classList.add('view-enter');
+        window.scrollTo(0, 0);
+    }
     if (hash.startsWith('chat=')) renderChat(hash.slice(5));
     else if (view === 'gallery') renderGallery();
     else if (view === 'keys') renderKeys();

@@ -20131,6 +20131,40 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         document.getElementById('csp-hdr-painter')?.setAttribute('aria-expanded', 'false');
     }
 
+    // 메뉴를 플로팅 버튼을 가리지 않는 자리에 펼친다.
+    //   ① 아래에 다 들어가면 아래 ② 위에 들어가면 위
+    //   ③ 둘 다 모자라면(버튼이 화면 중간쯤) 버튼 옆 — 왼쪽, 안 되면 오른쪽
+    //   ④ 옆자리도 없으면(좁은 화면) 위/아래 중 넓은 쪽에 맞춰 높이를 줄이고 스크롤
+    function placeMenuAroundAnchor(menu, anchor) {
+        const GAP = 8, EDGE = 8;
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const rect = anchor.getBoundingClientRect();
+        menu.style.maxHeight = '';
+        const mw = menu.offsetWidth;
+        const mh = Math.min(menu.offsetHeight, vh - EDGE * 2);
+        const spaceBelow = vh - rect.bottom - GAP - EDGE;
+        const spaceAbove = rect.top - GAP - EDGE;
+        const alignLeft = () => Math.max(EDGE, Math.min(rect.right - mw >= EDGE ? rect.right - mw : rect.left, vw - mw - EDGE));
+        let top, left;
+        if (spaceBelow >= mh) {
+            top = rect.bottom + GAP; left = alignLeft();
+        } else if (spaceAbove >= mh) {
+            top = rect.top - GAP - mh; left = alignLeft();
+        } else if (rect.left - GAP - EDGE >= mw || vw - rect.right - GAP - EDGE >= mw) {
+            left = rect.left - GAP - EDGE >= mw ? rect.left - GAP - mw : rect.right + GAP;
+            top = Math.max(EDGE, Math.min(rect.top + rect.height / 2 - mh / 2, vh - mh - EDGE));
+        } else {
+            const useBelow = spaceBelow >= spaceAbove;
+            const room = Math.max(120, useBelow ? spaceBelow : spaceAbove);
+            menu.style.maxHeight = `${room}px`;
+            const h = Math.min(mh, room);
+            top = useBelow ? rect.bottom + GAP : rect.top - GAP - h;
+            left = alignLeft();
+        }
+        menu.style.top = `${Math.round(top)}px`;
+        menu.style.left = `${Math.round(left)}px`;
+    }
+
     function toggleHeaderPainterMenu(anchor) {
         if (document.getElementById('csp-header-menu')) { closeHeaderPainterMenu(); return; }
         const on = isEnabled();
@@ -20178,18 +20212,7 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         document.body.appendChild(menu);
         applyCspTheme(menu);
 
-        // 플로팅 버튼 위치에 따라 위/아래 · 왼/오른쪽으로 펼친다
-        const rect = anchor.getBoundingClientRect();
-        const mh = menu.offsetHeight;
-        const mw = menu.offsetWidth;
-        const below = window.innerHeight - rect.bottom - 8;
-        let top = below >= mh ? rect.bottom + 8 : rect.top - mh - 8;
-        top = Math.max(8, Math.min(top, window.innerHeight - mh - 8));
-        let left = rect.right - mw;
-        if (left < 8) left = rect.left;
-        left = Math.max(8, Math.min(left, window.innerWidth - mw - 8));
-        menu.style.top = `${Math.round(top)}px`;
-        menu.style.left = `${Math.round(left)}px`;
+        placeMenuAroundAnchor(menu, anchor);
         anchor.setAttribute('aria-expanded', 'true');
 
         menu.querySelector('#csp-hm-enabled').addEventListener('change', (e) => {

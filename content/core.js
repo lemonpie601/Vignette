@@ -5450,6 +5450,11 @@ ${getCompactNsfwSceneAnalysisGuide()}
     function showToast(message) {
         // 키가 비어서 실패한 거면 일반 알림 대신 "설정 열기" 버튼이 있는 알림으로
         if (isMissingKeyMessage(message)) { showMissingKeyHelp(message); return; }
+        // 주소 접속 허용이 필요하면 허용하러 가는 버튼과 함께
+        if (/🔒 .*접속 허용/.test(String(message || ''))) {
+            showCspActionToast(String(message).replace(/^⚠️\s*(생성 실패:|분석 실패:)?\s*/, ''), '허용하러 가기', () => CSP_EXT.openManager('keys').catch(() => {}), '');
+            return;
+        }
         const old = document.getElementById('csp-toast');
         if (old) old.remove();
 
@@ -12373,7 +12378,12 @@ Natural language → Danbooru tag examples:
                     }
                     resolve(String(response.responseText || ''));
                 },
-                onerror: () => reject(new Error('네트워크 요청 실패: 태그북 URL 또는 권한을 확인해줘.')),
+                onerror: (error) => {
+                    const permMatch = String(error?.statusText || '').match(/^NO_PERMISSION (\S+)/);
+                    reject(new Error(permMatch
+                        ? `🔒 ${permMatch[1]} 주소는 아직 접속 허용이 안 됐어요. 관리 페이지 › 공통 설정에서 허용해 줘.`
+                        : '네트워크 요청 실패: 태그북 URL 또는 권한을 확인해줘.'));
+                },
                 ontimeout: () => reject(new Error('태그북 다운로드 시간이 초과됐어요.')),
                 onabort: () => reject(new Error('태그북 다운로드가 취소됐어요.'))
             });
@@ -12537,6 +12547,12 @@ Natural language → Danbooru tag examples:
                 onerror: (error) => {
                     if (settled) return;
                     console.info(`[Vignette] 네트워크 오류 ${method} ${redactUrlForLog(url)}`, error?.statusText || error?.error || '');
+                    const permMatch = String(error?.statusText || error?.error || '').match(/^NO_PERMISSION (\S+)/);
+                    if (permMatch) {
+                        // 사용자 지정 주소는 쓰기 전에 허용이 필요하다 (재시도해도 소용없으니 네트워크 오류로 취급하지 않는다)
+                        finishReject(new Error(`🔒 ${permMatch[1]} 주소는 아직 접속 허용이 안 됐어요. 관리 페이지 › 공통 설정에서 [허용]을 눌러 줘.`));
+                        return;
+                    }
                     const netErr = new Error('🌐 네트워크 오류: 인터넷 연결이나 API 주소를 확인해줘.');
                     netErr.isNetworkError = true;
                     finishReject(netErr);

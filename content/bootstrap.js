@@ -53,15 +53,19 @@
         notifyStale();
         return false;
     }
-    // 어디선가 놓친 끊김 오류는 콘솔/확장 오류 목록에 남기지 않고 안내로 바꾼다
+    // 어디선가 놓친 끊김 오류는 콘솔/확장 오류 목록에 남기지 않고 안내로 바꾼다.
+    // 주의: 이 오류 이벤트는 페이지 전체에서 온다. 다른 확장 프로그램이 업데이트되면서
+    // 같은 이름의 오류를 내도 여기로 들어온다 → 우리 확장이 실제로 끊겼을 때만 안내한다.
+    // (예전엔 확인 없이 띄워서, 업데이트가 없는데도 "업데이트됐어요"가 떴다)
+    const isOurStaleError = (text) => /Extension context invalidated/i.test(String(text || '')) && !isContextAlive();
     window.addEventListener('unhandledrejection', (e) => {
-        if (/Extension context invalidated/i.test(String(e.reason?.message || e.reason || ''))) {
+        if (isOurStaleError(e.reason?.message || e.reason)) {
             e.preventDefault();
             notifyStale();
         }
     });
     window.addEventListener('error', (e) => {
-        if (/Extension context invalidated/i.test(String(e.message || ''))) {
+        if (isOurStaleError(e.message)) {
             e.preventDefault();
             notifyStale();
         }

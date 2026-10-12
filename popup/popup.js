@@ -27,6 +27,11 @@ const item = (act, ic, label, extra = '', disabled = false) => `<button type="bu
 
 let tab = null;
 
+function showNote(text) {
+    root.querySelector('.note.is-flash')?.remove();
+    root.insertAdjacentHTML('afterbegin', `<div class="note is-flash">${esc(text)}</div>`);
+}
+
 async function getSites() {
     return (await chrome.storage.local.get(P.SITES_KEY))[P.SITES_KEY] || {};
 }
@@ -69,20 +74,34 @@ async function render() {
         root.innerHTML = `
             <div class="card"><div class="toggle"><span class="t"><span class="host">${esc(url.hostname)}</span><small>등록되지 않은 사이트예요. 켜면 메뉴에서 본문 · 하단 위치를 지정해서 쓸 수 있어요.</small></span></div></div>
             <button class="btn primary wide" id="add-site">이 사이트에서 사용하기</button>${foot}`;
-        document.getElementById('add-site').onclick = async () => {
-            const host = url.hostname.replace(/^www\./, '');
-            const id = P.sanitizeId(host);
-            const all = await getSites();
-            all[id] = { id, name: host, hosts: [host], chatPath: '', mode: 'generic', enabled: true, custom: true, userEdited: true, messageSelector: '', bodySelector: '', footerSelector: '', userSelector: '', idAttribute: '' };
-            await chrome.storage.local.set({ [P.SITES_KEY]: all });
-            await chrome.runtime.sendMessage({ type: 'site.inject', payload: { tabId: tab.id } });
-            setTimeout(render, 600);
+        document.getElementById('add-site').onclick = () => {
+            // ① 사이트 저장은 백그라운드에 맡긴다 (허락 창이 뜨면 팝업이 닫혀서 여기 코드가 끊길 수 있다)
+            // ② 허락은 클릭 직후 바로 물어야 크롬이 창을 띄워 준다 — 그 전에 await 하지 않는다
+            chrome.runtime.sendMessage({ type: 'site.addCustom', payload: { host: url.hostname, tabId: tab.id } });
+            chrome.permissions.request({ origins: [`${url.origin}/*`] })
+                .then(granted => { if (granted) setTimeout(render, 700); else showNote('허용하지 않았어요. 다시 누르면 다시 물어봐요.'); })
+                .catch(() => {});
         };
         bindCommon();
         return;
     }
 
     const enabled = platform.enabled !== false;
+    // 직접 추가한 사이트인데 접근 허용이 없으면(예전 버전에서 추가했거나 허용을 거둔 경우) 허용부터
+    if (platform.custom && enabled && !(await chrome.permissions.contains({ origins: [`${url.origin}/*`] }).catch(() => false))) {
+        root.innerHTML = `
+            <div class="card"><div class="toggle"><span class="t">${esc(platform.name || platform.id)}<small>이 사이트에서 쓰려면 접근 허용이 필요해요. 이 사이트만 허용돼요.</small></span></div></div>
+            <button class="btn primary wide" id="grant-site">이 사이트 접근 허용</button>
+            <div class="sep"></div>${modeSegHtml(mode)}${item('manager', 'external', '관리 페이지 열기')}`;
+        document.getElementById('grant-site').onclick = () => {
+            // 허용되면 백그라운드가 열린 탭에 바로 적용한다 (permissions.onAdded)
+            chrome.permissions.request({ origins: [`${url.origin}/*`] })
+                .then(ok => { if (ok) setTimeout(render, 700); else showNote('허용하지 않았어요.'); })
+                .catch(() => {});
+        };
+        bindCommon();
+        return;
+    }
     const state = enabled ? await askTab('state') : null;
     const siteSwitch = `<div class="card"><label class="toggle"><span class="t">${esc(platform.name || platform.id)}<small>${esc(url.hostname)} · 이 사이트에서 사용</small></span><span class="switch"><input type="checkbox" id="site-enabled" ${enabled ? 'checked' : ''}><span></span></span></label></div>`;
 

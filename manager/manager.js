@@ -564,7 +564,8 @@ function siteCardHtml(s) {
         <header>
             <span><b>${esc(s.name || s.id)}</b> <span class="muted">${esc((s.hosts || []).join(', '))}</span><br>
             <span class="state ${ready ? 'ok' : 'warn'}">${s.mode === 'univers' ? '자동 인식' : ready ? '위치 지정됨' : '본문 위치 지정 필요 — 채팅방에서 🎨 › 본문 위치 지정'}</span>
-            ${s.userEdited && builtin ? '<span class="badge">직접 수정함</span>' : ''}${s.custom ? '<span class="badge">추가한 사이트</span>' : ''}</span>
+            ${s.userEdited && builtin ? '<span class="badge">직접 수정함</span>' : ''}${s.custom ? '<span class="badge">추가한 사이트</span>' : ''}
+            ${s.custom ? '<span class="perm-slot"></span>' : ''}</span>
             <label class="switch" title="이 사이트에서 사용"><input type="checkbox" data-enabled ${s.enabled !== false ? 'checked' : ''}><span></span></label>
         </header>
         <details>
@@ -588,21 +589,36 @@ function renderSites() {
     main.innerHTML = `
         <div class="page-head">
             <div><h1>사이트 설정</h1><p>사이트마다 본문 · 하단 위치를 기억해요. 보통은 채팅방에서 🎨 버튼 › 위치 지정으로 고르면 되고, 여기서는 직접 고칠 수 있어요.</p></div>
-            <div class="toolbar"><button class="btn primary" id="add-site">+ 사이트 추가</button></div>
+            <form class="add-site" id="add-site-form"><input type="text" id="add-site-host" placeholder="example.com" spellcheck="false" autocomplete="off"><button class="btn primary" type="submit">+ 사이트 추가</button></form>
         </div>
         ${allSites().map(siteCardHtml).join('')}`;
-    $('#add-site').onclick = async () => {
-        const host = prompt('추가할 사이트 도메인 (예: example.com)');
-        if (!host) return;
-        const clean = host.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
-        const id = P.sanitizeId(clean);
-        const sites = (await chrome.storage.local.get(P.SITES_KEY))[P.SITES_KEY] || {};
-        sites[id] = { id, name: clean, hosts: [clean], chatPath: '', mode: 'generic', enabled: true, custom: true, userEdited: true, messageSelector: '', bodySelector: '', footerSelector: '', userSelector: '', idAttribute: '' };
-        await chrome.storage.local.set({ [P.SITES_KEY]: sites });
-        await loadAll();
-        renderSites();
-        toast('추가했어요. 그 사이트 채팅방을 새로고침하면 🎨 버튼이 생겨요.');
+    // 사이트 추가: 그 사이트만 접근 허용을 받는다 (버튼을 누른 바로 그 순간에 물어야 크롬이 창을 띄운다)
+    $('#add-site-form').onsubmit = (e) => {
+        e.preventDefault();
+        const clean = $('#add-site-host').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
+        if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(clean)) { toast('도메인 형식이 아니에요. 예: example.com'); return; }
+        chrome.permissions.request({ origins: [`https://${clean}/*`, `https://*.${clean}/*`] }).then(async (granted) => {
+            await chrome.runtime.sendMessage({ type: 'site.addCustom', payload: { host: clean } });
+            await loadAll();
+            renderSites();
+            toast(granted ? '추가했어요. 그 사이트 채팅방을 새로고침하면 🎨 버튼이 생겨요.' : '추가는 했지만 접근을 허용하지 않아서 아직 동작하지 않아요. 카드의 [허용]을 눌러 주세요.');
+        }).catch(() => {});
     };
+    // 추가한 사이트의 접근 허용 상태 표시
+    $$('.site-card', main).forEach(async (card) => {
+        const s = allSites().find(x => x.id === card.dataset.site);
+        if (!s?.custom) return;
+        const host = (s.hosts || [])[0];
+        if (!host) return;
+        const origins = [`https://${host}/*`];
+        const ok = await chrome.permissions.contains({ origins }).catch(() => false);
+        const slot = $('.perm-slot', card);
+        slot.innerHTML = ok
+            ? '<span class="perm-state is-ok">✓ 접근 허용됨</span>'
+            : '<span class="perm-state is-need">🔒 접근 허용 필요</span><button type="button" class="btn small primary" data-grant>허용</button>';
+        const btn = $('[data-grant]', slot);
+        if (btn) btn.onclick = () => chrome.permissions.request({ origins: [...origins, `https://*.${host}/*`] }).then(() => renderSites()).catch(() => {});
+    });
     $$('.site-card', main).forEach(card => {
         const id = card.dataset.site;
         const update = async (patch) => {
@@ -960,6 +976,7 @@ function renderKeys() {
                     <div class="key-field is-wide"><label>공급자</label>
                         <select data-key="geminiProvider" id="kp-provider">${PROVIDERS.map(p => `<option value="${p.value}" ${p.value === provider ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
                     ${pv.fields.map(f => fieldHtml(f).replace('class="key-field"', `class="key-field${f[2] === 'textarea' || f[0] === 'customApiUrl' ? ' is-wide' : ''}"`)).join('')}
+                    ${provider === 'custom' ? '<div class="perm-row" id="kp-perm"></div>' : ''}
                 </div>
                 <p class="key-hint">${esc(PROVIDER_HINTS[provider] || '')}</p>
             </section>
@@ -1004,15 +1021,40 @@ function renderKeys() {
         b.innerHTML = show ? KEY_ICONS.eyeOff : KEY_ICONS.eye;
         b.title = show ? '키 숨기기' : '키 보기';
     });
+    // 커스텀 주소: 기본 목록에 없는 서버라 접속 허용이 따로 필요하다 (그 주소만)
+    const customOrigin = () => {
+        try { return new URL($('[data-key="customApiUrl"]')?.value.trim()).origin; } catch (_) { return ''; }
+    };
+    const refreshPerm = async () => {
+        const box = $('#kp-perm');
+        if (!box) return;
+        const origin = customOrigin();
+        if (!origin) { box.innerHTML = ''; return; }
+        const ok = await chrome.permissions.contains({ origins: [`${origin}/*`] }).catch(() => false);
+        box.innerHTML = ok
+            ? `<span class="perm-state is-ok">✓ ${esc(origin)} 접속 허용됨</span>`
+            : `<span class="perm-state is-need">🔒 ${esc(origin)} 접속 허용이 필요해요</span><button type="button" class="btn small primary" id="kp-grant">허용</button>`;
+        const grant = $('#kp-grant');
+        if (grant) grant.onclick = () => {
+            chrome.permissions.request({ origins: [`${origin}/*`] }).then(refreshPerm).catch(() => {});
+        };
+    };
+    refreshPerm();
+    $('[data-key="customApiUrl"]')?.addEventListener('change', refreshPerm);
+
     $('#kp-revert').onclick = async () => { await loadAll(); renderKeys(); };
     const save = async () => {
         if ($('#kp-save').disabled) return;
+        // 커스텀 주소면 저장하면서 접속 허용도 같이 묻는다 (클릭 직후라야 크롬이 창을 띄운다 — await 전에 호출)
+        const origin = provider === 'custom' ? customOrigin() : '';
+        const permAsk = origin ? chrome.permissions.request({ origins: [`${origin}/*`] }).catch(() => false) : null;
         const fresh = decodeJson((await chrome.storage.local.get(LS + GLOBAL_SETTINGS))[LS + GLOBAL_SETTINGS], {});
         const next = { ...fresh, ...collectKeyForm() };
         await chrome.storage.local.set({ [LS + GLOBAL_SETTINGS]: encodeJson(next) });
+        const granted = permAsk ? await permAsk : true;
         await loadAll();
         renderKeys();
-        toast('저장했어요. 열려 있는 채팅 탭에도 바로 적용돼요.');
+        toast(granted ? '저장했어요. 열려 있는 채팅 탭에도 바로 적용돼요.' : '저장했어요. 다만 그 주소 접속을 허용하지 않아서 아직 쓸 수 없어요.');
     };
     $('#kp-save').onclick = save;
     page.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); } });

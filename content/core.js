@@ -8059,7 +8059,6 @@ select.is-dd-open { border-color: var(--csp-accent-line) !important; box-shadow:
 .csp-image-history-btn:disabled { opacity: .35; cursor: not-allowed; }
 .csp-image-history-count { min-width: 42px; text-align: center; font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted-foreground, #888); }
 .csp-generated-scene-image { margin-block: 16px; }
-p:has(+ .csp-generated-scene-image) { margin-bottom: 0; }
 
 /* 메시지 아래 버튼 */
 .csp-message-generate-btn, .csp-message-speed-btn {
@@ -8885,6 +8884,8 @@ Natural language → Danbooru tag examples:
                 for (const r of records) {
                     const t = r.target.nodeType === 1 ? r.target : r.target.parentElement;
                     if (!t || t.closest?.(OURS)) continue;
+                    // 입력창 타이핑은 답변 구성과 무관
+                    if (t.closest?.('textarea, input, [contenteditable="true"], [contenteditable=""], [role="textbox"]')) continue;
                     // 이미 아는 본문 안에서만 바뀐 것(답변 글이 써지는 중)은 본문·하단 구성이 그대로라 무시
                     if (known && insideKnownBody(t, known)) continue;
                     dirty = true;
@@ -9146,7 +9147,9 @@ Natural language → Danbooru tag examples:
             return Array.from(new Set(bodiesInside(s.bodies, root).map(b => s.groupOfBody.get(b) || b)));
         }
 
-        return { invalidate, scan, version: () => { scan(); return version; }, messageOf, bodyOf, footerOf, isBody, isAssistantBody, isUserBody, isFooter, stableIdOf, allMessages };
+        return { invalidate, scan, version: () => { scan(); return version; },
+            insideKnownBody: (el) => { const k = scanCache?.allBodySet; return !!(k && el && insideKnownBody(el, k)); },
+            messageOf, bodyOf, footerOf, isBody, isAssistantBody, isUserBody, isFooter, stableIdOf, allMessages };
     })();
 
     // 디버그용: 저장소에 csp_debug=1 이 있을 때만 판별 엔진을 콘솔에 연다
@@ -19823,7 +19826,8 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 maybeAutoRepair();
             }
         } catch (err) { console.info('[Vignette] dom watch', err); }
-        setTimeout(domWatch, 5000);
+        // 5초 뒤, 브라우저가 한가한 틈에 다시 확인 (급하지 않은 일이라 3초까지 양보)
+        setTimeout(() => runWhenIdle(domWatch, 3000), 5000);
     }, 7000);
 
     // 토스트 + 버튼 하나
@@ -21172,11 +21176,18 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
     function scheduleMessageInject(delayMs = 260) {
         if (messageInjectScheduled) return;
         messageInjectScheduled = true;
-        setTimeout(() => {
+        // 잠깐 기다렸다가, 브라우저가 한가할 때(사이트가 그리는 중이 아닐 때) 처리한다.
+        // 아주 바쁜 사이트라도 1초 안에는 반드시 돈다.
+        setTimeout(() => runWhenIdle(() => {
             messageInjectScheduled = false;
             injectStyles();
             injectMessageButtons();
-        }, delayMs);
+        }, 1000), delayMs);
+    }
+
+    function runWhenIdle(fn, timeout = 1000) {
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(() => fn(), { timeout });
+        else setTimeout(fn, 0);
     }
 
     function scheduleInject() {
@@ -21245,6 +21256,27 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         }
         let needMessages = false;
 
+        // 범용 모드(유니챗 외) 빠른 길: 노드 하나하나 판별하지 않고
+        // "우리 UI · 입력창 · 이미 아는 답변 안"이 아닌 곳에서 노드가 붙거나 빠졌는지만 본다.
+        // 실제 판별은 예약된 처리(이미 처리한 답변은 건너뜀)가 한 번에 한다.
+        if (!isUniversMode()) {
+            if (!isEnabled() || !isChatRoomPage()) { if (needMenu) scheduleMenuInject(); return; }
+            for (const mutation of mutations) {
+                if (mutation.type !== 'childList') continue;
+                const t = getMutationElement(mutation.target);
+                if (!t || isScenePainterNode(t) || isTypingArea(t)) continue;
+                // 사이트가 다시 그리면서 우리 삽화 · 버튼을 지웠으면 다시 붙여야 한다
+                if (mutation.removedNodes.length && Array.from(mutation.removedNodes).some(n => isScenePainterNode(getMutationElement(n)))) { needMessages = true; break; }
+                if (GEN.insideKnownBody(t)) continue;          // 답변 글이 써지는 중 — 구성은 그대로
+                if (mutationOwnsOnlyCspNodes(mutation)) continue;
+                needMessages = true;
+                break;
+            }
+            if (needMenu) scheduleMenuInject();
+            if (needMessages) scheduleMessageInject();
+            return;
+        }
+
         for (const mutation of mutations) {
             // 설정창·확인창 같은 팝업 안의 변화는 채팅 화면과 무관하다. 추가된 노드를
             // 하나하나 검사하기 전에 대상 요소 하나로 먼저 걸러낸다 (드롭다운 수백 개 옵션 등).
@@ -21263,6 +21295,21 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
     }
 
     const cspScopedObserver = new MutationObserver(handleObservedMutations);
+    let _observerMode = '';
+    function applyObserverMode() {
+        const mode = isUniversMode() ? 'univers' : 'generic';
+        if (mode === _observerMode) return;
+        _observerMode = mode;
+        cspScopedObserver.disconnect();
+        cspScopedObserver.observe(document.body, mode === 'univers'
+            ? { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }
+            : { childList: true, subtree: true });
+    }
+
+    // 사용자가 글을 쓰는 칸 — 타이핑으로 생기는 변경은 답변 판별과 무관하다
+    function isTypingArea(el) {
+        return !!el?.closest?.('textarea, input, select, [contenteditable="true"], [contenteditable=""], [role="textbox"]');
+    }
 
     function refreshScopedObservers() {
         if (observerRefreshScheduled) return;
@@ -21284,7 +21331,10 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         });
         scheduleInject();
 
-        cspScopedObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        // 클래스 변경 감시는 유니챗 판별에만 필요하다. 다른 사이트에서 켜 두면 호버 · 애니메이션 때문에
+        // 초당 수백 번 깨어나서 느린 사이트를 더 느리게 만든다 → 범용 모드에선 자식 노드 변경만 본다.
+        applyObserverMode();
+        CSP_EXT.onChange((what) => { if (what === 'site') applyObserverMode(); });
         // 스크롤 중에는 가상 리스트가 노드를 쉴 새 없이 갈아끼운다. 그동안 들어온 변경은
         // 모아뒀다가 스크롤이 멈추면 한 번에 처리한다 (markScrolling/handleObservedMutations).
         // scroll은 버블링이 안 돼서 capture로 받아야 내부 스크롤 영역까지 잡힌다.

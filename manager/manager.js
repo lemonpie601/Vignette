@@ -894,7 +894,8 @@ const KEY_ICONS = {
     brain: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>',
     eye: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
     eyeOff: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-2.2 3.2"/><path d="M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2"/></svg>',
-    info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
+    info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    shield: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>'
 };
 
 // 공급자별 키 받는 곳 안내
@@ -910,9 +911,31 @@ const PROVIDER_HINTS = {
     custom: 'OpenAI 호환 서버 주소와 그 서버의 키를 넣어요. 키가 필요 없는 서버면 인증 방식을 "인증 없음"으로.'
 };
 
+// NovelAI 안전 설정 (코어와 같은 키 · 같은 기본값)
+const NAI_SAFETY_KEY = LS + 'csp_ext_nai_safety';
+const NAI_LOG_KEY = LS + 'csp_ext_nai_log';
+function readNaiSafety() {
+    let s = {};
+    try { s = JSON.parse(state.store[NAI_SAFETY_KEY] || '{}') || {}; } catch (_) {}
+    const num = (v, d, max) => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : d; };
+    return { batchGapSec: num(s.batchGapSec, 6, 120), hourlyLimit: Math.round(num(s.hourlyLimit, 30, 1000)) };
+}
+function recentNaiCount() {
+    let list = [];
+    try { list = JSON.parse(state.store[NAI_LOG_KEY] || '[]'); } catch (_) {}
+    const hourAgo = Date.now() - 3600 * 1000;
+    return (Array.isArray(list) ? list : []).filter(t => Number(t) > hourAgo).length;
+}
+function collectSafety() {
+    const out = {};
+    $$('#main [data-safety]').forEach(el => { out[el.dataset.safety] = Number(el.value || 0); });
+    return out;
+}
+
 function renderKeys() {
     const main = $('#main');
     const g = readGlobalSettings();
+    const safety = readNaiSafety();
     const st = keyStatus(g);
     const provider = st.provider;
     const pv = PROVIDERS.find(p => p.value === provider) || PROVIDERS[0];
@@ -981,6 +1004,23 @@ function renderKeys() {
                 <p class="key-hint">${esc(PROVIDER_HINTS[provider] || '')}</p>
             </section>
 
+            <section class="key-card">
+                <header>
+                    <span class="key-card-icon">${KEY_ICONS.shield}</span>
+                    <div class="key-card-title"><b>NovelAI 안전 설정</b><small>요청이 한꺼번에 몰리지 않게 · 0이면 끔</small></div>
+                    <span class="key-pill is-ok">최근 1시간 ${recentNaiCount()}장</span>
+                </header>
+                <div class="key-grid two">
+                    <div class="key-field"><label>여러 장 생성 사이 쉬는 시간 (초)</label>
+                        <input class="key-input" type="number" min="0" max="120" step="1" data-safety="batchGapSec" value="${safety.batchGapSec}">
+                        <small class="field-help">스피드 생성 · 장면 2~3장을 그릴 때 장면 사이에 이만큼 (+0~2초) 쉬어요.</small></div>
+                    <div class="key-field"><label>시간당 생성 한도 (장)</label>
+                        <input class="key-input" type="number" min="0" max="1000" step="1" data-safety="hourlyLimit" value="${safety.hourlyLimit}">
+                        <small class="field-help">최근 1시간 생성 수가 넘으면 멈추고 계속할지 물어요. 모든 사이트 합계예요.</small></div>
+                </div>
+                <p class="key-hint">NovelAI의 계정 정지 기준은 공개돼 있지 않아요. 이 설정은 요청을 사람이 쓰는 속도에 가깝게 맞추는 장치일 뿐, 정지를 막아 준다는 보장은 아니에요.</p>
+            </section>
+
             <section class="key-note">
                 <span class="key-note-icon">${KEY_ICONS.info}</span>
                 <div><b>유저스크립트에서 쓰던 키가 있다면</b>
@@ -1001,10 +1041,11 @@ function renderKeys() {
         $('#kp-revert').disabled = !dirty;
         $('#kp-msg').textContent = dirty ? '저장하지 않은 변경사항이 있어요' : '변경사항이 없어요';
     };
-    const initial = JSON.stringify(collectKeyForm());
+    const snapshot = () => JSON.stringify([collectKeyForm(), collectSafety()]);
+    const initial = snapshot();
     const page = $('.keys-page');
-    page.addEventListener('input', () => setDirty(JSON.stringify(collectKeyForm()) !== initial));
-    page.addEventListener('change', () => setDirty(JSON.stringify(collectKeyForm()) !== initial));
+    page.addEventListener('input', () => setDirty(snapshot() !== initial));
+    page.addEventListener('change', () => setDirty(snapshot() !== initial));
     if (renderKeys._pendingDirty) { setDirty(true); renderKeys._pendingDirty = false; }
 
     $('#kp-provider').onchange = (e) => {
@@ -1050,7 +1091,8 @@ function renderKeys() {
         const permAsk = origin ? chrome.permissions.request({ origins: [`${origin}/*`] }).catch(() => false) : null;
         const fresh = decodeJson((await chrome.storage.local.get(LS + GLOBAL_SETTINGS))[LS + GLOBAL_SETTINGS], {});
         const next = { ...fresh, ...collectKeyForm() };
-        await chrome.storage.local.set({ [LS + GLOBAL_SETTINGS]: encodeJson(next) });
+        const safetyNext = { ...readNaiSafety(), ...collectSafety() };
+        await chrome.storage.local.set({ [LS + GLOBAL_SETTINGS]: encodeJson(next), [NAI_SAFETY_KEY]: JSON.stringify(safetyNext) });
         const granted = permAsk ? await permAsk : true;
         await loadAll();
         renderKeys();

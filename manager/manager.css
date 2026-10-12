@@ -64,6 +64,9 @@ h2 { margin: 0 0 10px; font-size: 15px; }
 .key-pill.is-missing { background: #e5484d; color: #fff; }
 
 .key-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.key-grid.two { grid-template-columns: 1fr 1fr; }
+.field-help { font-size: 11.5px; color: var(--soft); line-height: 1.5; }
+@media (max-width: 760px) { .key-grid.two { grid-template-columns: 1fr; } }
 .key-input::placeholder { font-family: var(--font); letter-spacing: 0; color: var(--soft); }
 .key-field { display: grid; gap: 6px; min-width: 0; }
 .key-field.is-wide, .key-field:has(.secret-field) { grid-column: 1 / -1; }
@@ -80,7 +83,8 @@ textarea.key-input { min-height: 110px; line-height: 1.5; }
 
 .key-note { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; padding: 14px 18px; border-radius: var(--radius); background: var(--elev); }
 .key-note-icon { flex: none; color: var(--accent); margin-top: 1px; }
-.key-note b { display: block; font-size: 13.5px; }
+.key-note > div > b { display: block; font-size: 13.5px; }
+.key-note small b { display: inline; font-weight: 700; color: var(--muted); }
 .key-note small { color: var(--soft); font-size: 12.5px; line-height: 1.6; }
 
 .save-bar {

@@ -8100,7 +8100,7 @@ body.csp-scene-hidden .csp-message-speed-btn { display: none !important; }
 .csp-confirm-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 9999999;
+    z-index: 2147483646;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -8122,7 +8122,7 @@ body.csp-scene-hidden .csp-message-speed-btn { display: none !important; }
     white-space: pre-line;
     animation: csp-rise .16s ease-out;
 }
-.csp-confirm-box > p { margin: 0; }
+.csp-confirm-box > p { margin: 0; white-space: pre-line; }
 .csp-confirm-title { margin: 0 0 4px; font-size: 15px; font-weight: 800; }
 .csp-confirm-sub { margin: 0 0 12px; font-size: 12.5px; color: var(--csp-soft); white-space: normal; }
 .csp-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
@@ -14263,11 +14263,64 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
         };
     }
 
+    // ── NovelAI 요청 안전장치 ───────────────────────────────────
+    // NovelAI의 계정 정지 기준은 공개돼 있지 않다. 사람이 손으로 쓰는 속도에 가깝게:
+    //   · 여러 장을 한 번에 그릴 때(스피드 생성 · 장면 2~3장) 장면 사이에 몇 초 쉰다 (+ 0~2초 무작위)
+    //   · 최근 1시간 생성 수가 한도를 넘으면 멈추고 계속할지 묻는다 (계속하면 10분간은 다시 안 물음)
+    // 값은 관리 페이지 › 공통 설정 › NovelAI 안전 설정에서 바꾼다. 0이면 끔.
+    const NAI_SAFETY_KEY = 'csp_ext_nai_safety';
+    const NAI_LOG_KEY = 'csp_ext_nai_log';
+    let _naiLimitOkUntil = 0;
+
+    function getNaiSafety() {
+        const s = safeJsonParse(localStorage.getItem(NAI_SAFETY_KEY), {}) || {};
+        const num = (v, d, max) => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : d; };
+        return { batchGapSec: num(s.batchGapSec, 6, 120), hourlyLimit: Math.round(num(s.hourlyLimit, 30, 1000)) };
+    }
+
+    // 최근 1시간 생성 기록 (시각만). 모든 탭 · 사이트가 같이 센다.
+    function readNaiLog() {
+        const hourAgo = Date.now() - 3600 * 1000;
+        const list = safeJsonParse(localStorage.getItem(NAI_LOG_KEY), []);
+        return (Array.isArray(list) ? list : []).filter(t => Number(t) > hourAgo);
+    }
+    function recordNaiRequest() {
+        const list = readNaiLog();
+        list.push(Date.now());
+        localStorage.setItem(NAI_LOG_KEY, JSON.stringify(list.slice(-1000)));
+    }
+
+    async function checkNaiHourlyLimit() {
+        const { hourlyLimit } = getNaiSafety();
+        if (!hourlyLimit || Date.now() < _naiLimitOkUntil) return;
+        const count = readNaiLog().length;
+        if (count < hourlyLimit) return;
+        const ok = await cspConfirm(`최근 1시간 동안 이미지를 ${count}장 만들었어요. (시간당 한도 ${hourlyLimit}장)\n\n계속 만들까요? 계속하면 10분 동안은 다시 묻지 않아요.\n한도는 관리 페이지 › 공통 설정에서 바꿀 수 있어요.`);
+        if (!ok) throw new Error('⏸️ 시간당 생성 한도에서 멈췄어요. 잠시 쉬었다가 다시 해 봐.');
+        _naiLimitOkUntil = Date.now() + 10 * 60 * 1000;
+    }
+
+    // 여러 장을 연달아 그릴 때 장면 사이 쉬기. onTick(남은 초)로 진행 표시를 갱신한다.
+    async function waitNaiBatchGap(onTick) {
+        const { batchGapSec } = getNaiSafety();
+        if (!batchGapSec) return;
+        const total = batchGapSec * 1000 + Math.random() * 2000;
+        const end = Date.now() + total;
+        const signal = currentTaskHud?.abortController?.signal;
+        while (Date.now() < end) {
+            if (signal?.aborted) throw new Error('작업이 취소됐어요.');
+            try { onTick?.(Math.ceil((end - Date.now()) / 1000)); } catch (_) {}
+            await new Promise(r => setTimeout(r, Math.min(500, Math.max(0, end - Date.now()))));
+        }
+    }
+
     async function generateImageWithNai({ basePrompt, baseNegative, finalPrompt, finalNegative, charPrompts, settings }) {
         const global = getGlobalSettings();
         if (!global.naiApiKey) {
             throw new Error('NAI API Key / Token이 비어 있어요.');
         }
+        await checkNaiHourlyLimit();
+        recordNaiRequest();
 
         const model = global.naiModel || DEFAULT_NAI_MODEL;
 
@@ -16126,6 +16179,15 @@ ${segmentLines ? segmentLines + '\n' : ''}- Do NOT return a single scene object.
                 const _ps = buildFinalPromptFromPlan(_plan, room);
                 const _charPrompts = _ps.charPrompts || [];
                 console.log(`[SpeedMode ${_si+1}] ✅ ${_charPrompts.length}슬롯 | ${_charPrompts.map(c => c.name).join(', ')}`);
+                // 두 번째 장면부터는 NovelAI 요청 사이에 쉬었다 보낸다 (연달아 몰아 보내지 않게)
+                if (_si > 0) {
+                    await waitNaiBatchGap(sec => updateTaskHud({
+                        title: `다음 장면 준비 중${_stepLabel}`,
+                        message: `NovelAI 요청 사이에 쉬는 중 · ${sec}초`,
+                        progress: _pct + 22
+                    }));
+                    updateTaskHud({ title: `NAI 생성 중${_stepLabel}`, message: `"${_plan.sceneTitle || '장면'}" — 이미지를 그리는 중.`, progress: _pct + 25 });
+                }
                 const _imageUrl = await generateImageWithNai({
                     basePrompt: _ps.basePrompt, baseNegative: _ps.baseNegative,
                     finalPrompt: _ps.finalPrompt, finalNegative: _ps.finalNegative,

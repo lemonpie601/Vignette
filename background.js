@@ -4,7 +4,8 @@
 //  · 이미지/메타 저장소 (확장 origin의 IndexedDB → 관리 페이지와 공유)
 'use strict';
 
-importScripts('shared/platforms.js', 'shared/imagedb.js');
+// 크롬: 서비스 워커라 여기서 불러온다. 파이어폭스: 이벤트 페이지라 manifest의 background.scripts가 먼저 불러 둔다.
+if (typeof importScripts === 'function') importScripts('shared/platforms.js', 'shared/imagedb.js');
 
 const { BUILTIN_PLATFORMS, matchPlatform, SITES_KEY } = self.CSP_PLATFORMS;
 

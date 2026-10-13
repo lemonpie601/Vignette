@@ -76,7 +76,8 @@ API를 쓰지 않고 "이런 경우엔 이렇게" 규칙으로 고칩니다. 자
    파일
 
 ```
-manifest.json          MV3 설정
+manifest.json          MV3 설정 (크롬 기준 — 파이어폭스용은 빌드할 때 바꿔 끼움)
+scripts/build.mjs      배포용 zip 만들기 (크롬 / 파이어폭스)
 background.js          사이트 주입 · API 요청 대리(CORS) · 이미지 저장소
 content/loader.js      모든 페이지에 붙는 작은 스크립트 (켜진 사이트만 본체 주입)
 content/bootstrap.js   저장소/네트워크 연결, 위치 지정 피커
@@ -86,3 +87,15 @@ shared/imagedb.js      이미지 IndexedDB
 manager/               관리 페이지
 popup/                 툴바 팝업
 ```
+
+   파이어폭스
+
+```
+node scripts/build.mjs            # dist/vignette-chrome-<버전>.zip, dist/vignette-firefox-<버전>.zip
+node scripts/build.mjs firefox    # 파이어폭스만
+```
+
+- 코드는 같고 manifest만 다르다: `background.service_worker` → `background.scripts`, `browser_specific_settings.gecko` 추가 (데스크톱 140+, 안드로이드 142+)
+- 테스트: `about:debugging` › 이 Firefox › 임시 부가 기능 로드 › `dist/firefox/manifest.json`
+- 배포: addons.mozilla.org에 `dist/vignette-firefox-*.zip` 업로드
+- 폴더 저장(`showDirectoryPicker`)은 파이어폭스에 없어서 안내 메시지만 뜬다

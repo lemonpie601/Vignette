@@ -860,6 +860,40 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
         return `https://${host}/v1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(model)}:generateContent`;
     }
 
+    // 키·값이 문자열/숫자/불리언뿐인 평평한 객체 리터럴만 다룬다 (firebaseConfig 모양)
+    function jsObjectLiteralToJson(source) {
+        let out = '';
+        let i = 0;
+        while (i < source.length) {
+            const ch = source[i];
+            if (ch === '"' || ch === "'" || ch === '`') {
+                let j = i + 1;
+                let str = '';
+                while (j < source.length && source[j] !== ch) {
+                    if (source[j] === '\\' && j + 1 < source.length) { str += source[j + 1]; j += 2; continue; }
+                    str += source[j++];
+                }
+                out += JSON.stringify(str);
+                i = j + 1;
+            } else if (ch === '/' && source[i + 1] === '/') {
+                while (i < source.length && source[i] !== '\n') i++;
+            } else if (ch === '/' && source[i + 1] === '*') {
+                const end = source.indexOf('*/', i + 2);
+                i = end < 0 ? source.length : end + 2;
+            } else if (/[A-Za-z_$]/.test(ch)) {
+                let j = i;
+                while (j < source.length && /[\w$]/.test(source[j])) j++;
+                const word = source.slice(i, j);
+                out += /^(true|false|null)$/.test(word) ? word : JSON.stringify(word);
+                i = j;
+            } else {
+                out += ch;
+                i++;
+            }
+        }
+        return out.replace(/,(\s*[}\]])/g, '$1');
+    }
+
     function parseFirebaseConfigInput(input) {
         const raw = String(input || '').trim();
         if (!raw) return null;
@@ -879,9 +913,9 @@ window.__CSP_BOOT__(function (localStorage, GM_xmlhttpRequest, CSP_EXT) {
         } catch (_) {}
 
         // Firebase 콘솔에서 복사한 JS 객체는 key에 따옴표가 없는 경우가 많아서
-        // 사용자가 직접 입력한 설정값에 한해 JS object literal 파싱을 허용합니다.
+        // JSON으로 고쳐서 다시 읽습니다. (eval/Function은 MV3 CSP와 파이어폭스 심사에서 막힌다)
         try {
-            return Function(`"use strict"; return (${source});`)();
+            return JSON.parse(jsObjectLiteralToJson(source));
         } catch (err) {
             throw new Error('Firebase Config를 읽지 못했어요. Firebase 콘솔의 firebaseConfig 객체 전체를 붙여넣어줘.');
         }
